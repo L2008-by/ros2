@@ -188,8 +188,7 @@ rostopic list | grep turtle1
  
 turtlesim窗口中，依次绘制底面椭圆、右侧竖线、左侧竖线、顶面椭圆，形成完整斜圆柱体。
 椭圆长轴、圆柱体高度不能设置过大，否则海龟瞬移会超出画布边界，造成图形残缺。
-![小海龟绘制圆柱体运行效果](../../img/chapter/turtle_cylinder.png)
- 
+[小海龟绘制圆柱体运行效果](../../img/chapter/turtle_cylinder.png)
 五、参数调整
  
 a=2.0，b=0.8，height=2.5，steps=80，为程序默认参数，绘制标准圆柱体。
