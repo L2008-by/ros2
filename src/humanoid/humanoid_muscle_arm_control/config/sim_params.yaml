@@ -1,0 +1,32 @@
+# 肌肉驱动上肢（人形机器人分类）仿真与键盘运动控制参数
+# ======================================================
+# 文件结构采用 ROS2 标准的两段式（/** 通配所有节点 → ros__parameters），
+# 因此同一份 YAML 既能被 ros2 launch 注入节点，也能被 standalone 的 main.py 直接读取
+# （sim_core.load_params），保证「仿真 / 键盘 / 控制器参数」只有一个来源。
+/**:
+  ros__parameters:
+    # ---------- 仿真 ----------
+    sim_rate: 500.0                # 物理仿真频率 (Hz)
+    publish_rate: 30.0             # 话题发布频率 (Hz)
+    model_path: ''                 # 空 = 使用包内 models/musculoskeletal_arm.xml
+
+    # ---------- 末端（任务空间）控制 ----------
+    kp_task: 60.0                  # 任务空间比例增益 (N/m)（control_mode="task" 时使用）
+    kd_task: 14.0                  # 任务空间阻尼 (N·s/m)
+    kp_joint: 12.0                 # 关节空间比例增益 (N·m/rad)；过大会超出肌肉力矩能力而振荡
+    kd_joint: 3.0                  # 关节阻尼注入 (N·m·s/rad)
+    control_mode: ik               # ik：DLS 逆解 + 关节 PD；task：雅可比转置任务空间 PD
+    f_task_max: 10.0               # 任务力限幅 (N)
+    tau_task_max: 10.0             # 任务力矩限幅 (N·m)，重力补偿不受此限
+    bias_compensation: true        # 重力/科氏补偿（关闭可做对照实验）
+    cocontraction: 0.04            # 共收缩基量（相对 F_max，提供关节刚度）
+
+    # ---------- 肌肉（Hill 模型） ----------
+    tau_act: 0.015                 # 激活时间常数 (s)
+    tau_deact: 0.060               # 放松时间常数 (s)
+
+    # ---------- 控制分配 ----------
+    moment_refresh_steps: 100      # 力矩臂重标定周期（物理步）
+
+    # ---------- 键盘 ----------
+    hand_speed: 0.18               # 末端目标点移动速度 (m/s)

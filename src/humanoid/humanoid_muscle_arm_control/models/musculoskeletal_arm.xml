@@ -1,0 +1,115 @@
+<!--
+  简化肌肉骨骼人（右上肢）MJCF 模型
+  =================================
+  - 骨骼：固定躯干 + 右臂 3 自由度（肩 pitch / 肩 roll / 肘 pitch）
+  - 肌肉：6 块 Hill 型肌肉，用 spatial tendon 跨越关节（每自由度一对主动肌/拮抗肌）
+      * 肩屈肌 shoulder_flexor / 肩伸肌 shoulder_extensor
+      * 肩外展肌 shoulder_abductor / 肩内收肌 shoulder_adductor
+      * 屈肘肌 elbow_flexor / 伸肘肌 elbow_extensor（跨肩肘双关节肌，起点在胸前）
+  - 驱动：motor 执行器输出「肌肉力」，肌肉的激活动力学与力-长度-速度关系由
+    muscle_model.py 显式计算（不依赖 MuJoCo 内置 gaintype="muscle"，便于教学与标定）
+  - 末端：site name="hand"（腕端），用于键盘控制的目标点与雅可比解算
+  - 肩关节世界坐标 (0, -0.20, 1.40)，上臂 0.30 m + 前臂 0.26 m，可达半径 ≈ 0.56 m
+
+  模型与代码均为课程作业自建实现，尺寸参考人体上肢的典型比例。
+-->
+<mujoco model="musculoskeletal_arm">
+  <compiler angle="radian" coordinate="local"/>
+  <option timestep="0.001" gravity="0 0 -9.81" iterations="60" integrator="implicitfast"
+          cone="elliptic" impratio="10"/>
+
+  <default>
+    <joint armature="0.05" damping="2.00" frictionloss="0.05"/>
+    <geom type="capsule" density="1000" friction="1.0 0.05 0.05"/>
+    <!-- 机器人本体几何：关闭碰撞（contype/conaffinity=0）。
+         上臂位于 y=-0.20，正好贴在胸箱表面，若开启碰撞会产生持续的接触力，
+         把手臂顶开并诱发控制振荡；本模块关注肌肉-骨骼驱动，不需要自碰撞。 -->
+    <default class="robot">
+      <geom contype="0" conaffinity="0"/>
+    </default>
+    <motor ctrllimited="true" ctrlrange="0 600"/>
+    <site type="sphere" size="0.008" rgba="0.90 0.25 0.25 1"/>
+  </default>
+
+  <worldbody>
+    <light pos="0.6 0.6 3.0" dir="-0.15 -0.15 -1" diffuse="0.9 0.9 0.9" ambient="0.42 0.42 0.42"/>
+    <geom name="ground" type="plane" size="6 6 0.02" rgba="0.55 0.55 0.58 1" friction="1.0 0.1 0.1"
+          contype="1" conaffinity="1"/>
+
+    <!-- 观察相机：overview（第三视角）/ side（侧视，看肩外展）/ front_camera（沿 +x 看向手臂） -->
+    <camera name="overview" pos="1.55 1.75 1.55" xyaxes="-0.75 0.66 0 -0.33 -0.38 0.86" fovy="50"/>
+    <camera name="side" pos="0 -2.10 1.35" xyaxes="1 0 0 0 0.18 0.98" fovy="50"/>
+    <camera name="front_camera" pos="0 -0.20 1.45" xyaxes="0 -1 0 0 0 1" fovy="65"/>
+
+    <!-- 三个目标球：均在可达半径内（0.34 ~ 0.50 m），供键盘定位与演示序列使用 -->
+    <body name="target_forward" pos="0.42 -0.20 1.14">
+      <geom name="target_forward_geom" type="sphere" size="0.045" rgba="0.20 0.75 0.30 1"
+            contype="0" conaffinity="0"/>
+    </body>
+    <body name="target_lateral" pos="0.24 -0.44 1.10">
+      <geom name="target_lateral_geom" type="sphere" size="0.045" rgba="0.20 0.40 0.85 1"
+            contype="0" conaffinity="0"/>
+    </body>
+    <body name="target_low" pos="0.34 -0.22 1.00">
+      <geom name="target_low_geom" type="sphere" size="0.045" rgba="0.90 0.62 0.15 1"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- ==================== 骨骼：躯干（固定） ==================== -->
+    <body name="torso" pos="0 0 1.10">
+      <geom name="chest" type="box" size="0.11 0.20 0.22" pos="0 0 0.11" rgba="0.86 0.86 0.89 1" mass="8" class="robot"/>
+      <geom name="pelvis" type="box" size="0.12 0.16 0.10" pos="0 0 -0.06" rgba="0.62 0.62 0.66 1" mass="6" class="robot"/>
+
+      <!-- 肌肉起点（躯干侧）：前/后一对控制肩屈伸，外上/内下一对控制肩外展内收 -->
+      <site name="ch_ant"  pos="0.10 -0.20 0.26" rgba="0.25 0.25 0.30 1"/>
+      <site name="ch_post" pos="-0.10 -0.20 0.26" rgba="0.45 0.45 0.80 1"/>
+      <site name="ch_lat"  pos="0.00 -0.36 0.36" rgba="0.25 0.25 0.30 1"/>
+      <site name="ch_med"  pos="0.00 -0.04 0.18" rgba="0.45 0.45 0.80 1"/>
+      <site name="ch_bi"   pos="0.07 -0.20 0.31" rgba="0.25 0.25 0.30 1"/>
+
+      <!-- ==================== 右上臂 ==================== -->
+      <body name="upper_arm" pos="0 -0.20 0.30">
+        <joint name="shoulder_pitch" axis="0 1 0" range="-1.70 1.70" limited="true"/>
+        <joint name="shoulder_roll"  axis="1 0 0" range="-2.00 2.00" limited="true"/>
+        <geom name="upper_arm_geom" type="capsule" fromto="0 0 0 0 0 -0.30" size="0.035"
+              rgba="0.95 0.62 0.25 1" mass="1.6" class="robot"/>
+        <!-- 肩肌止点（上臂侧） -->
+        <site name="ua_sh"  pos="0 0 -0.05" rgba="0.25 0.25 0.30 1"/>
+        <site name="ua_mid" pos="0 0 -0.18" rgba="0.25 0.25 0.30 1"/>
+        <!-- 肘伸肌起点（上臂后侧，使伸肘肌成为真正的拮抗肌，只跨肘关节） -->
+        <site name="ua_post" pos="-0.090 0 -0.120" rgba="0.45 0.45 0.80 1"/>
+
+        <!-- ==================== 右前臂 ==================== -->
+        <body name="forearm" pos="0 0 -0.30">
+          <joint name="elbow_pitch" axis="0 1 0" range="-2.40 0" limited="true"/>
+          <geom name="forearm_geom" type="capsule" fromto="0 0 0 0 0 -0.26" size="0.030"
+                rgba="0.95 0.62 0.25 1" mass="1.0" class="robot"/>
+          <!-- 肘肌止点（前侧 = 屈肘肌，后侧 = 伸肘肌）与末端 -->
+          <site name="fa_flex" pos="0.035 0 -0.05" rgba="0.25 0.25 0.30 1"/>
+          <site name="fa_ext"  pos="-0.070 0 -0.030" rgba="0.45 0.45 0.80 1"/>
+          <site name="hand"    pos="0 0 -0.26" size="0.014" rgba="0.18 0.40 0.85 1"/>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <!-- ==================== 肌肉（空间腱：起点-止点连线，腱长可微 → 力矩臂由模型给出） ==================== -->
+  <tendon>
+    <spatial name="shoulder_flexor_t"   width="0.004"><site site="ch_ant"/><site site="ua_mid"/></spatial>
+    <spatial name="shoulder_extensor_t" width="0.004"><site site="ch_post"/><site site="ua_mid"/></spatial>
+    <spatial name="shoulder_abductor_t" width="0.004"><site site="ch_lat"/><site site="ua_sh"/></spatial>
+    <spatial name="shoulder_adductor_t" width="0.004"><site site="ch_med"/><site site="ua_sh"/></spatial>
+    <spatial name="elbow_flexor_t"      width="0.004"><site site="ch_bi"/><site site="fa_flex"/></spatial>
+    <spatial name="elbow_extensor_t"    width="0.004"><site site="ua_post"/><site site="fa_ext"/></spatial>
+  </tendon>
+
+  <!-- ==================== 肌肉执行器（输出肌肉力，力的大小由 muscle_model.py 决定） ==================== -->
+  <actuator>
+    <motor name="shoulder_flexor"   tendon="shoulder_flexor_t"   ctrlrange="0 500"/>
+    <motor name="shoulder_extensor" tendon="shoulder_extensor_t" ctrlrange="0 500"/>
+    <motor name="shoulder_abductor" tendon="shoulder_abductor_t" ctrlrange="0 350"/>
+    <motor name="shoulder_adductor" tendon="shoulder_adductor_t" ctrlrange="0 350"/>
+    <motor name="elbow_flexor"      tendon="elbow_flexor_t"      ctrlrange="0 350"/>
+    <motor name="elbow_extensor"    tendon="elbow_extensor_t"    ctrlrange="0 500"/>
+  </actuator>
+</mujoco>

@@ -1,0 +1,11 @@
+# humanoid_muscle_arm_control 运行依赖
+mujoco>=3.0
+numpy
+
+# 参数文件读取（ROS2 环境自带；standalone 无此包时自动回退到内置默认值）
+pyyaml
+
+# 演示素材输出（可选：缺省时自动跳过动图/激活曲线）
+imageio
+imageio-ffmpeg
+matplotlib
