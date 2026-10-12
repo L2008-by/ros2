@@ -139,6 +139,5 @@
       "前伸协同",
       "屈曲内收协同"
     ]
-  },
-  "metrics_path": "/tmp/msk_assets/metrics.json"
+  }
 }

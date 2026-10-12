@@ -44,7 +44,7 @@ cd src/humanoid/humanoid_muscle_arm_control
 python3 main.py --check     # 模型自检：力矩臂矩阵 / 主动肌-拮抗肌配对 / 控制回路
 python3 main.py             # 键盘交互控制
 python3 main.py --demo      # 自动演示：初始姿态 → 前伸 → 侧向 → 前下方 → 回位
-python3 main.py --test      # 自动化测试（10 项，含共收缩刚度与肌肉协同实验）
+python3 main.py --test      # 自动化测试（11 项，含共收缩刚度与肌肉协同实验）
 python3 main.py --capture DIR   # 生成文档素材（关键帧/动图/激活曲线/metrics.json）
 python3 main.py --synergy   # 实验性：2 维肌肉协同控制（默认关闭，见 §7）
 ```
@@ -204,7 +204,7 @@ MuJoCo 的 `tendon` 执行器对关节的力矩贡献为
 
 ## 7. 性能评价与已知限制
 
-自动化测试（`python3 main.py --test`，10 项全部通过；Ubuntu 22.04.5 + MuJoCo 3.15.0，
+自动化测试（`python3 main.py --test`，11 项全部通过；Ubuntu 22.04.5 + MuJoCo 3.15.0，
 2 vCPU 虚拟机、SSH 会话下 `MUJOCO_GL=egl` 离屏渲染）实测：
 
 | 指标 | 结果 |

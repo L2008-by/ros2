@@ -7,7 +7,7 @@
 ## 功能概述
 
 - 自建简化肌肉骨骼人上肢 MJCF 模型：固定躯干 + 右臂 3 自由度（肩 pitch / 肩 roll / 肘 pitch），
-  末端带 `hand` site，场景内置三个目标球（前伸 / 外展 / 上举）；
+  末端带 `hand` site，场景内置三个目标球（前伸 / 外展 / 前下方）；
 - **肌肉驱动**：6 块肌肉（每个自由度一对主动肌/拮抗肌，其中屈肘肌为跨肩肘双关节肌）通过
   **空间腱**跨越关节，执行器输出的是「肌肉力」；
 - **Hill 型肌肉模型**（`muscle_model.py`）：一阶激活动力学（`τ_act` / `τ_deact`）、
@@ -29,7 +29,8 @@
 
 - Ubuntu 22.04 + ROS2 Humble（或 Windows / 任意 Python 环境直接跑 standalone）
 - `pip3 install -r requirements.txt`（`mujoco`、`numpy` 必需；`pyyaml`、`imageio`、`matplotlib` 可选）
-- 无显示环境（纯 SSH / 容器）下渲染需 `export MUJOCO_GL=osmesa`
+- 无显示环境（纯 SSH / 容器）下渲染需 `export MUJOCO_GL=egl`（或 `osmesa`，需安装 libosmesa6）
+- ROS2 键盘遥控节点依赖 POSIX 终端（Linux/macOS）；Windows 请使用 standalone 模式（`python3 main.py`）
 
 ## 安装
 
@@ -51,7 +52,7 @@ source install/setup.bash
 python3 main.py              # 键盘交互控制末端目标点
 python3 main.py --demo       # 自动演示：初始姿态 → 前伸 → 侧向 → 前下方 → 回位
 python3 main.py --check      # 模型自检：力矩臂矩阵 / 主动肌-拮抗肌配对 / 控制回路
-python3 main.py --test       # 自动化测试（10 项，含刚度与协同实验）
+python3 main.py --test       # 自动化测试（11 项，含刚度与协同实验）
 python3 main.py --capture DIR # 生成文档素材：关键帧、动图、肌肉激活曲线、metrics.json
 python3 main.py --synergy    # 用 2 维肌肉协同模式控制
 ```
@@ -106,7 +107,7 @@ humanoid_muscle_arm_control/
 ├── models/musculoskeletal_arm.xml   # 自建肌肉骨骼人上肢 MJCF 模型
 ├── launch/main.launch.py        # 启动文件（注入 config/sim_params.yaml）
 ├── config/sim_params.yaml       # 仿真/控制器/肌肉/键盘参数（standalone 与 ROS2 共用）
-├── test/test_standalone.py      # 10 项自动化测试
+├── test/test_standalone.py      # 11 项自动化测试
 ├── main.py / main.sh            # 模块主入口与一键脚本
 └── README.md
 ```

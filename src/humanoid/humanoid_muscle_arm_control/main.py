@@ -12,7 +12,7 @@
 
        W/S 前伸/后收    A/D 左移/右移    Q/E 上升/下降    空格急停    ESC 退出
 
-2. ``--demo``    ——自动演示「初始姿态 → 前伸 → 外展 → 上举 → 回位」并录制素材；
+2. ``--demo``    ——自动演示「初始姿态 → 前伸 → 外展 → 前下方 → 回位」并录制素材；
 3. ``--capture DIR`` ——在 ``--demo`` 基础上把关键帧、动图、肌肉激活分析与
    ``metrics.json``（实测指标）写入目录，用于生成文档配图；
 4. ``--check``   ——模型自检：关节/肌肉/力矩臂/主动肌-拮抗肌配对/协同基底一致性；
@@ -67,7 +67,7 @@ DEMO_SEQUENCE = (
     ("scene_home", "初始姿态（肘屈曲，肌肉处于静息激活）", "home"),
     ("scene_forward", "前伸协同：末端抵近绿色目标球", "target_forward"),
     ("scene_lateral", "肩外展：末端抵近蓝色目标球", "target_lateral"),
-    ("scene_low", "屈曲内收协同：末端上举到橙色目标球", "target_low"),
+    ("scene_low", "屈曲内收协同：末端下探至前下方橙色目标球", "target_low"),
 )
 
 
@@ -251,7 +251,7 @@ def run_demo(arm, params, capture_dir=None, gif_path=None, verbose=True):
 
     if verbose:
         print("=" * 60)
-        print("  肌肉骨骼人手臂演示：初始姿态 → 前伸 → 外展 → 上举 → 回位")
+        print("  肌肉骨骼人手臂演示：初始姿态 → 前伸 → 外展 → 前下方 → 回位")
         print("=" * 60)
 
     for frame_name, description, source in DEMO_SEQUENCE:

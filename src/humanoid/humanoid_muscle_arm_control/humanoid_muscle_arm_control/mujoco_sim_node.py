@@ -44,7 +44,11 @@ class MusculoskeletalSimNode(Node):
         self.declare_parameter('publish_rate', defaults.publish_rate)
         self.declare_parameter('kp_task', defaults.kp_task)
         self.declare_parameter('kd_task', defaults.kd_task)
+        self.declare_parameter('kp_joint', defaults.kp_joint)
+        self.declare_parameter('kd_joint', defaults.kd_joint)
+        self.declare_parameter('control_mode', defaults.control_mode)
         self.declare_parameter('f_task_max', defaults.f_task_max)
+        self.declare_parameter('tau_task_max', defaults.tau_task_max)
         self.declare_parameter('bias_compensation', defaults.bias_compensation)
         self.declare_parameter('cocontraction', defaults.cocontraction)
         self.declare_parameter('tau_act', defaults.tau_act)
@@ -60,7 +64,11 @@ class MusculoskeletalSimNode(Node):
             'publish_rate': publish_rate,
             'kp_task': self.get_parameter('kp_task').get_parameter_value().double_value,
             'kd_task': self.get_parameter('kd_task').get_parameter_value().double_value,
+            'kp_joint': self.get_parameter('kp_joint').get_parameter_value().double_value,
+            'kd_joint': self.get_parameter('kd_joint').get_parameter_value().double_value,
+            'control_mode': self.get_parameter('control_mode').get_parameter_value().string_value,
             'f_task_max': self.get_parameter('f_task_max').get_parameter_value().double_value,
+            'tau_task_max': self.get_parameter('tau_task_max').get_parameter_value().double_value,
             'bias_compensation': self.get_parameter('bias_compensation').get_parameter_value().bool_value,
             'cocontraction': self.get_parameter('cocontraction').get_parameter_value().double_value,
             'tau_act': self.get_parameter('tau_act').get_parameter_value().double_value,

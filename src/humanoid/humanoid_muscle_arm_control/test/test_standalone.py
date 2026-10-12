@@ -182,7 +182,7 @@ def test_cocontraction_stiffness(arm):
           f"c0=0.50 → {high['stiffness']:.1f} N/m")
     print(f"[PASS] 共收缩刚度: c0=0.02 → {low['stiffness']:6.1f} N/m "
           f"(位移 {low['displacement_norm'] * 1000:.2f} mm)；"
-          f"c0=0.20 → {high['stiffness']:6.1f} N/m "
+          f"c0=0.50 → {high['stiffness']:6.1f} N/m "
           f"(位移 {high['displacement_norm'] * 1000:.2f} mm)，"
           f"刚度提升 {high['stiffness'] / low['stiffness']:.2f} 倍")
 
@@ -234,7 +234,7 @@ def test_synergy_mode_tracking(arm):
     arm.params.use_synergy = False
     text = " | ".join(f"{label}: " + ", ".join(f"{e:.1f} mm" for e in errors)
                       for label, errors in results.items())
-    print(f"[INFO] 协同控制对照（前伸/外展/上举稳态误差）: {text}")
+    print(f"[INFO] 协同控制对照（前伸/外展/前下方稳态误差）: {text}")
 
 
 def test_render(arm):
@@ -242,7 +242,7 @@ def test_render(arm):
     try:
         image = arm.render(camera="overview")
     except Exception as exc:                                     # pragma: no cover
-        raise AssertionError(f"渲染失败（无显示环境时可设 MUJOCO_GL=osmesa）: {exc}")
+        raise AssertionError(f"渲染失败（无显示环境时可设 MUJOCO_GL=egl 或 osmesa）: {exc}")
     check(image.shape == (480, 640, 3), f"渲染尺寸异常: {image.shape}")
     print(f"[PASS] 相机渲染: {image.shape[1]}x{image.shape[0]} RGB")
 
