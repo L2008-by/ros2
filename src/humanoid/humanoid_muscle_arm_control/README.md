@@ -128,3 +128,12 @@ humanoid_muscle_arm_control/
 - 参考了 MuJoCo 官方文档（`spatial` 腱 / `mj_jacSite` / `mj_applyFT`）与仓库内已有模块
   （`humanoid_keyboard_control`、`rov_mujoco`）的 ROS2 包结构惯例；
 - 代码与文档在 AI 助手协助下完成，实测数据均由 `main.py --capture` / `--test` 在本机仿真中生成。
+
+### 3.3 无图形环境（SSH / 虚拟机无桌面）下的运行
+
+离屏渲染需要显式指定 GL 后端（本模块实测在 Ubuntu 22.04 + MuJoCo 3.15 下用 EGL 可出图）：
+
+```shell
+export MUJOCO_GL=egl        # 或 osmesa（需安装 libosmesa6）
+python3 main.py --capture DIR   # 关键帧/动图/激活曲线/metrics.json
+```
