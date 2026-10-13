@@ -1,0 +1,39 @@
+# 双足步态行走模块参数（humanoid_gait_control）
+# 单位：长度 m，时间 s，角度 rad，力 N
+
+gait:
+  # LIPM 质心高度 = 行走时骨盆中心平均高度（脚底着地，腿微屈）
+  com_height: 1.05
+  # 单步前进距离
+  step_len: 0.10
+  # 单步时长（低速步态：平均速度 0.083 m/s < 身体巡航能力，避免滞后积累）
+  step_period: 1.2
+  # 行走步数（4 步为稳定演示步数；更多步数属实验性）
+  n_steps: 4
+  # 左右脚横向间距（小步宽：减小换脚侧向跳变，利于侧向稳定）
+  step_width: 0.05
+  # 摆动脚抬离地面最大高度
+  swing_height: 0.05
+  # 准备段时长（双脚站立、重心稳定）
+  prepare_time: 0.4
+  # 起始支撑脚（left / right）
+  start_foot: left
+
+control:
+  # 关节 PD 增益（力矩 = Kp·(q_des - q) - Kd·q̇）
+  kp: 400.0
+  kd: 15.0
+  # 侧向 roll 关节加强增益
+  kp_roll: 800.0
+  kd_roll: 18.0
+  # 控制力矩限幅
+  ctrl_limit: 300.0
+  # 摆臂幅度 / 肘关节固定屈曲
+  arm_swing: 0.30
+  elbow_bend: -0.25
+
+render:
+  # 文档素材相机与分辨率
+  camera: overview
+  height: 480
+  width: 640

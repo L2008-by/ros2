@@ -49,6 +49,7 @@ ROS每章节运行代码:
 * [人形机器人基础](./humanoid/humanoid_basics.md)
 * [人形机器人肌肉驱动上肢仿真与键盘运动控制](./humanoid/humanoid_muscle_arm_control.md)
 * [人形机器人键盘运动控制](./humanoid/humanoid_keyboard_control.md)
+* [人形机器人双足步态行走控制](./humanoid/humanoid_gait_control.md)
 
 ## 3. 肌肉骨骼人 <span id='musculoskeletal'></span>
 
