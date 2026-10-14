@@ -6,18 +6,25 @@
 
 ## 功能概述
 
-- 自建简化双足人形 MJCF 模型（13 关节 + 髋/踝 roll 抗侧倾加强），包含前视相机与场景障碍物（红柱/蓝块）；
+- 自建简化双足人形 MJCF 模型（15 关节 + 髋/踝 roll 抗侧倾加强），包含前视相机与场景障碍物（红柱/蓝块）；
 - **站姿控制**：全关节 PD 伺服回直立位，4 s 站立质心零漂移（仿真 3 万+ step/s）；
 - **运动控制**：
-  - 前进/后退 —— 速度级控制（覆盖底盘 freejoint 世界系线速度，位移 ≈ v×t）；
+  - 前进/后退 —— 速度级控制（按偏航角将指令速度分解到世界系 vx/vy，沿机器人当前朝向移动，位移 ≈ v×t）；
   - 转向 —— 姿态级控制（直接旋转底盘四元数），避免双足原地旋转脚底摩擦滑移导致的侧倾失稳；
-- 发布 `/humanoid/odom`、`/joint_states`、`/tf`，订阅 `/cmd_vel`；
+- 发布 `/humanoid/odom`、`/joint_states`、`/tf`（标准 `tf2_ros.TransformBroadcaster`），订阅 `/cmd_vel`；
 - 无 ROS 独立运行（`main.py` 键盘控制 / 自动演示），与 ROS2 节点共用同一仿真核心 `sim_core.py`。
+
+> **能力边界**：移动控制为演示级运动学控制（直接改写 freejoint 速度与根部四元数），
+> 不包含双足步态；位移/转角指标仅验证指令执行准确性，不代表真实步行控制或
+> 动力学准确性，与静态站姿的物理稳定性分开评价（详见仓库 docs 文档 4.5 节）。
 
 ## 环境要求
 
 - Ubuntu 22.04 + ROS2 Humble（或 Windows + Python 直接运行 standalone 模式）
-- `pip3 install -r requirements.txt`（mujoco、numpy；录制 GIF 另需 imageio）
+- Python 依赖安装：
+  ```bash
+  pip3 install -r requirements.txt        # mujoco、numpy；录制 GIF 另需 imageio
+  ```
 
 ## 运行方式
 
@@ -32,6 +39,11 @@ python3 main.py --test     # 自动化测试（站姿/驱动/转向/渲染/性�
 ### 2. ROS2 launch（Humble）
 
 ```bash
+# 源码放入工作空间
+mkdir -p ~/ros2_ws/src
+cp -r <本包路径> ~/ros2_ws/src/
+
+# 构建并启动
 cd ~/ros2_ws && colcon build --symlink-install --packages-select humanoid_keyboard_control
 source install/setup.bash
 ros2 launch humanoid_keyboard_control main.launch.py
@@ -42,6 +54,7 @@ ros2 launch humanoid_keyboard_control main.launch.py
 ```bash
 ros2 topic echo /humanoid/odom      # 查看里程计
 ros2 topic echo /joint_states       # 查看关节状态
+ros2 run tf2_ros tf2_echo world humanoid/base_link   # 验证 TF 可读取
 ```
 
 ## 话题
@@ -51,7 +64,7 @@ ros2 topic echo /joint_states       # 查看关节状态
 | `/cmd_vel` | geometry_msgs/Twist | 速度指令（linear.x 前进，angular.z 转向） |
 | `/humanoid/odom` | nav_msgs/Odometry | 里程计（world 系位姿与速度） |
 | `/joint_states` | sensor_msgs/JointState | 15 个人形关节位置 |
-| `/tf` | tf2_msgs/TFMessage | world → humanoid/base_link |
+| `/tf` | tf2_msgs/TFMessage | world → humanoid/base_link（TransformBroadcaster 发布） |
 
 ## 文件结构
 

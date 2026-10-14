@@ -50,6 +50,11 @@ def generate_launch_description():
             default_value='0.4',
             description='键盘角速度比例 (rad/s)'
         ),
+        DeclareLaunchArgument(
+            'cmd_timeout',
+            default_value='0.5',
+            description='指令超时停车时间 (s)'
+        ),
 
         # ========== 仿真节点 ==========
         Node(
@@ -61,6 +66,7 @@ def generate_launch_description():
                 'model_path': LaunchConfiguration('model_path'),
                 'sim_rate': LaunchConfiguration('sim_rate'),
                 'publish_rate': LaunchConfiguration('publish_rate'),
+                'cmd_timeout': LaunchConfiguration('cmd_timeout'),
             }]
         ),
 

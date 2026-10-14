@@ -1,8 +1,9 @@
 <!--
   简化人形机器人（双足）MJCF 模型
-  - 自由度：双腿（髋 roll / 髋 pitch / 膝 pitch / 踝 pitch）×2 + 双臂（肩 pitch / 肘 pitch）×2 + 颈
+  - 自由度：15 关节 = 双腿（髋 roll / 髋 pitch / 膝 pitch / 踝 pitch / 踝 roll）×2
+             + 双臂（肩 pitch / 肘 pitch）×2 + 颈 ×1
   - 驱动：全部 motor（关节力矩），站姿由 PD 伺服维持（见 sim_core.py）
-  - 运动控制：键盘 v/w 指令改写底盘 freejoint 速度（运动学控制 + 姿态伺服）
+  - 运动控制：键盘 v/w 指令按偏航角分解改写底盘 freejoint 世界系速度（运动学控制 + 姿态伺服）
   模型与代码均为课程作业自建实现，形状参数参考 MuJoCo 官方 humanoid 的设计思路。
 -->
 <mujoco model="humanoid_simple">

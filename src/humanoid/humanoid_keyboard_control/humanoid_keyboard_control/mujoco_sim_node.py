@@ -20,6 +20,7 @@ from geometry_msgs.msg import Twist, TransformStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Header
+from tf2_ros import TransformBroadcaster
 
 try:
     from humanoid_keyboard_control.sim_core import HumanoidSim
@@ -42,10 +43,12 @@ class MujocoSimNode(Node):
         self.declare_parameter('kp_roll', 400.0)
         self.declare_parameter('v_max', 0.3)
         self.declare_parameter('w_max', 0.6)
+        self.declare_parameter('cmd_timeout', 0.5)       # 指令超时停车 (s)
 
         model_path = self.get_parameter('model_path').get_parameter_value().string_value
         sim_rate = self.get_parameter('sim_rate').get_parameter_value().double_value
         publish_rate = self.get_parameter('publish_rate').get_parameter_value().double_value
+        self.cmd_timeout = self.get_parameter('cmd_timeout').get_parameter_value().double_value
 
         # ========== 仿真核心 ==========
         self.sim = HumanoidSim(model_path=model_path or None)
@@ -57,6 +60,7 @@ class MujocoSimNode(Node):
 
         # ========== 控制指令缓存 ==========
         self.cmd_vel = Twist()
+        self.last_cmd_time = None
 
         # ========== 订阅者 ==========
         self.sub_cmd_vel = self.create_subscription(
@@ -65,7 +69,8 @@ class MujocoSimNode(Node):
         # ========== 发布者 ==========
         self.pub_odom = self.create_publisher(Odometry, '/humanoid/odom', 10)
         self.pub_joint_states = self.create_publisher(JointState, '/joint_states', 10)
-        self.pub_tf = self.create_publisher(TransformStamped, '/tf', 10)
+        # TF 通过 tf2_ros.TransformBroadcaster 发布（内部封装 tf2_msgs/TFMessage）
+        self.tf_broadcaster = TransformBroadcaster(self)
 
         # ========== 定时器 ==========
         sim_period = 1.0 / sim_rate
@@ -83,11 +88,20 @@ class MujocoSimNode(Node):
 
     # ------------------------------------------------------------------
     def _cmd_vel_callback(self, msg: Twist):
-        """接收速度指令（键盘遥操作 / 其他控制器下发）。"""
+        """接收速度指令（键盘遥操作 / 其他控制器下发），并刷新指令时间戳。"""
         self.cmd_vel = msg
+        self.last_cmd_time = self.get_clock().now()
 
     def _sim_step_callback(self):
-        """物理步进：站姿 PD + 运动指令 → mj_step。"""
+        """物理步进：站姿 PD + 运动指令 → mj_step。
+
+        指令超时停车：若超过 cmd_timeout 未收到新 /cmd_vel，将速度清零，
+        避免遥控节点停止后仿真继续执行最后一条非零指令。
+        """
+        if self.last_cmd_time is not None:
+            age = (self.get_clock().now() - self.last_cmd_time).nanoseconds * 1e-9
+            if age > self.cmd_timeout:
+                self.cmd_vel = Twist()
         self.sim.step(v_lin=self.cmd_vel.linear.x, w_yaw=self.cmd_vel.angular.z)
         self.step_count += 1
 
@@ -110,10 +124,11 @@ class MujocoSimNode(Node):
         odom.pose.pose.orientation.y = float(quat[2])
         odom.pose.pose.orientation.z = float(quat[3])
         odom.twist.twist.linear.x = od['vx']
+        odom.twist.twist.linear.y = od['vy']
         odom.twist.twist.angular.z = od['wz']
         self.pub_odom.publish(odom)
 
-        # --- TF: world -> humanoid/base_link ---
+        # --- TF: world -> humanoid/base_link（标准 TransformBroadcaster） ---
         tf_msg = TransformStamped()
         tf_msg.header.stamp = now
         tf_msg.header.frame_id = 'world'
@@ -125,7 +140,7 @@ class MujocoSimNode(Node):
         tf_msg.transform.rotation.x = float(quat[1])
         tf_msg.transform.rotation.y = float(quat[2])
         tf_msg.transform.rotation.z = float(quat[3])
-        self.pub_tf.publish(tf_msg)
+        self.tf_broadcaster.sendTransform(tf_msg)
 
         # --- 关节状态 ---
         jp = self.sim.read_joint_positions()

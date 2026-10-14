@@ -94,6 +94,7 @@ class KeyboardTeleopNode(Node):
             if rlist:
                 c = os.read(self._fd, 1).decode('utf-8', errors='ignore')
                 if c == '\x1b':
+                    # ESC：可能是方向键转义序列的开头，也可能是独立 ESC 键
                     r2, _, _ = select.select([self._fd], [], [], 0.03)
                     if r2:
                         c2 = os.read(self._fd, 1).decode('utf-8', errors='ignore')
@@ -109,6 +110,12 @@ class KeyboardTeleopNode(Node):
                                     key = 'KEY_RIGHT'
                                 elif c3 == 'D':
                                     key = 'KEY_LEFT'
+                            else:
+                                key = '\x1b'   # ESC + '[' 无后续字符，视为 ESC
+                        else:
+                            key = '\x1b'       # ESC + 其他字符，视为 ESC
+                    else:
+                        key = '\x1b'           # 独立 ESC 键
                 else:
                     key = c
             termios.tcsetattr(self._fd, termios.TCSADRAIN, self.settings)
@@ -119,7 +126,12 @@ class KeyboardTeleopNode(Node):
     def _publish_callback(self):
         """定时读取按键并发布速度指令（松开按键即停止）。"""
         key = self._get_key()
-        if key in (' ', '\x03'):
+        if key == '\x1b':
+            # ESC：发布零速度后退出（终端设置由 destroy_node 恢复）
+            self.twist = Twist()
+            self.pub_cmd_vel.publish(self.twist)
+            raise KeyboardInterrupt
+        elif key in (' ', '\x03'):
             # 急停
             self.twist = Twist()
             if key == '\x03':
@@ -133,6 +145,13 @@ class KeyboardTeleopNode(Node):
             # 松开 / 未知键：停止
             self.twist = Twist()
         self.pub_cmd_vel.publish(self.twist)
+
+    def publish_zero_velocity(self):
+        """发布零速度（退出前调用，避免仿真继续执行最后一条非零指令）。"""
+        try:
+            self.pub_cmd_vel.publish(Twist())
+        except Exception:
+            pass
 
     def destroy_node(self):
         """恢复终端设置。"""
@@ -157,6 +176,8 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        # 退出前发布零速度，避免遥控节点停止后仿真继续执行最后一条非零指令
+        node.publish_zero_velocity()
         node.destroy_node()
         rclpy.shutdown()
 

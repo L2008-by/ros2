@@ -4,10 +4,11 @@
 ==============================
 覆盖（课程任务①"物理仿真 + 键盘运动控制"的核心指标）：
   1. 站姿稳定性：4 s 站立质心零漂移、根高保持；
-  2. 前进驱动：位移 ≈ v × t；
-  3. 姿态级转向：偏航角 ≈ w × t 且全程保持站立；
-  4. 相机渲染可用；
-  5. 仿真性能：实时因子（每秒物理步数）满足演示要求。
+  2. 前进驱动：位移 ≈ v × t（沿机器人朝向）；
+  3. 转向后沿朝向移动：先转向再前进，位移方向与偏航角一致；
+  4. 姿态级转向：偏航角 ≈ w × t 且全程保持站立；
+  5. 相机渲染可用；
+  6. 仿真性能：实时因子（每秒物理步数）满足演示要求。
 
 运行方式（包根目录）：
     python3 test/test_standalone.py
@@ -41,7 +42,7 @@ def test_standing(sim, seconds=4.0):
 
 
 def test_drive(sim, v=0.3, t_forward=1.5):
-    """前进驱动：位移 ≈ v × t。"""
+    """前进驱动：位移 ≈ v × t（初始朝向即世界系 +x）。"""
     sim.reset()
     pos0 = sim.read_odom()
     steps = int(t_forward / sim.dt)
@@ -53,6 +54,35 @@ def test_drive(sim, v=0.3, t_forward=1.5):
     assert abs(dx - expected) < 0.15, f"前进位移误差过大: {dx:.3f} vs {expected:.3f}"
     assert pos['z'] > 0.9, "前进过程中倾倒"
     print(f"[PASS] 前进驱动: {t_forward:.1f}s 位移 {dx:.3f} m (期望 ≈{expected:.3f} m)")
+
+
+def test_drive_heading(sim, w=0.9, t_turn=1.0, v=0.3, t_drive=1.0):
+    """转向后沿朝向移动：速度按偏航角分解，位移方向应与偏航角一致。"""
+    sim.reset()
+    # 1) 先转向（姿态级）
+    steps_turn = int(t_turn / sim.dt)
+    for _ in range(steps_turn):
+        sim.step(w_yaw=w)
+    yaw = sim.read_odom()['yaw']
+    pos0 = sim.read_odom()
+    # 2) 再沿当前朝向"前进"
+    steps_drive = int(t_drive / sim.dt)
+    for _ in range(steps_drive):
+        sim.step(v_lin=v)
+    pos = sim.read_odom()
+    dx = pos['x'] - pos0['x']
+    dy = pos['y'] - pos0['y']
+    moved = math.hypot(dx, dy)
+    expected = v * t_drive
+    assert abs(moved - expected) < 0.15, f"位移距离误差过大: {moved:.3f} vs {expected:.3f}"
+    # 方向一致性：位移矢量与期望朝向 (cos yaw, sin yaw) 夹角 < 10°
+    if moved > 1e-6:
+        cos_ang = (dx * math.cos(yaw) + dy * math.sin(yaw)) / moved
+        assert cos_ang > math.cos(math.radians(10)), \
+            f"位移方向偏离朝向: cos夹角={cos_ang:.3f} (期望 > {math.cos(math.radians(10)):.3f})"
+    assert pos['z'] > 0.9, "前进过程中倾倒"
+    print(f"[PASS] 转向后沿朝向移动: yaw={math.degrees(yaw):.0f}° 位移 "
+          f"({dx:.3f}, {dy:.3f}) m (距离 {moved:.3f} m，期望 ≈{expected:.3f} m)")
 
 
 def test_turn(sim, w=0.5, t_turn=2.0):
@@ -100,6 +130,7 @@ def main():
     sim = HumanoidSim()
     test_standing(sim)
     test_drive(sim)
+    test_drive_heading(sim)
     test_turn(sim)
     test_render(sim)
     test_performance(sim)

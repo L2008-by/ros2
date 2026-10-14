@@ -6,10 +6,15 @@ sim_core.py —— 人形机器人 MuJoCo 仿真核心（无 ROS 依赖）
   1. 加载自建简化人形 MJCF 模型（models/humanoid_simple.xml）；
   2. 站姿控制：所有关节 PD 伺服回直立位（髋/踝 roll 单独加强增益）；
   3. 运动控制（键盘指令 v/w）：
-       - 前进/后退：速度级控制（覆盖底盘 freejoint 的世界系线速度）；
+       - 前进/后退：速度级控制（按当前偏航角将指令速度分解到世界系 vx/vy，
+         使"前进"始终沿机器人当前朝向）；
        - 转向：姿态级控制（直接对底盘四元数做微小旋转，避免双足原地
          旋转时脚底摩擦滑移导致的侧倾失稳）；
   4. 输出：里程计（x, y, yaw）、关节状态、前视相机渲染。
+
+说明：本模块为演示级运动学控制——直接改写 freejoint 速度与根部四元数，
+不包含双足步态生成；位移/转角指标仅验证指令执行准确性，不代表真实
+步行控制或动力学准确性（详见 docs/humanoid/humanoid_keyboard_control.md）。
 
 本文件不依赖 ROS，standalone 入口（main.py）与 ROS 节点（mujoco_sim_node.py）
 共用同一套仿真逻辑。
@@ -76,8 +81,11 @@ class HumanoidSim:
         """执行一步仿真。
 
         参数:
-            v_lin: 线速度指令（世界系 +x，前进为正），速度级控制
+            v_lin: 线速度指令（m/s，正值沿机器人当前朝向"前进"）
             w_yaw: 偏航角速度指令（rad/s），姿态级控制
+
+        说明：v_lin 会按当前偏航角分解为世界系 vx/vy，因此转向后仍沿
+        机器人朝向前进；w_yaw 为 0 时机器人按当前朝向匀速直线移动。
         """
         v_lin = float(np.clip(v_lin, -self.V_MAX, self.V_MAX))
         w_yaw = float(np.clip(w_yaw, -self.W_MAX, self.W_MAX))
@@ -89,8 +97,10 @@ class HumanoidSim:
                        - self.KV * self.data.qvel[self.human_dadr[qi]]
         self.data.ctrl[:] = np.clip(ctrl, -250.0, 250.0)
 
-        # 2) 前进/后退：速度级控制（覆盖 freejoint 世界系线速度）
-        self.data.qvel[self.root_dadr] = v_lin
+        # 2) 前进/后退：速度级控制（按偏航角将指令速度分解到世界系 vx/vy）
+        yaw = self._yaw()
+        self.data.qvel[self.root_dadr] = v_lin * math.cos(yaw)
+        self.data.qvel[self.root_dadr + 1] = v_lin * math.sin(yaw)
         # 3) 转向：姿态级控制（清除角速度，直接旋转四元数）
         self.data.qvel[self.root_dadr + 3: self.root_dadr + 6] = 0.0
         if w_yaw != 0.0:
@@ -108,16 +118,21 @@ class HumanoidSim:
     # ------------------------------------------------------------------
     # 感知输出
     # ------------------------------------------------------------------
+    def _yaw(self):
+        """底盘当前偏航角（绕世界系 z，rad）。"""
+        r = self.root_qadr
+        qw, qx, qy, qz = self.data.qpos[r + 3: r + 7]
+        return math.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
+
     def read_odom(self):
         """里程计：位置 (x, y)、偏航角、速度。"""
         q = self.data.qpos
         r = self.root_qadr
-        qw, qx, qy, qz = q[r + 3: r + 7]
-        yaw = math.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
         return {
             "x": float(q[r]), "y": float(q[r + 1]), "z": float(q[r + 2]),
-            "yaw": float(yaw),
+            "yaw": self._yaw(),
             "vx": float(self.data.qvel[self.root_dadr]),
+            "vy": float(self.data.qvel[self.root_dadr + 1]),
             "wz": float(self.data.qvel[self.root_dadr + 5]),
         }
 
