@@ -62,7 +62,7 @@ class BalanceSim:
     def __init__(self, model_path=None, params=None):
         self.params = params or {}
         # 中文/非 ASCII 路径兼容：先读文件内容再从字符串加载
-        path = model_path or _MODEL_REL
+        path = model_path or self._default_model_path()
         with open(path, encoding="utf-8") as handle:
             xml = handle.read()
         self.model = mujoco.MjModel.from_xml_string(xml)
@@ -116,6 +116,26 @@ class BalanceSim:
     # ------------------------------------------------------------------
     # 基础操作
     # ------------------------------------------------------------------
+    @staticmethod
+    def _default_model_path():
+        """包内默认模型路径。
+
+        优先用源码树内的 ``models/``（standalone 运行、以及 ``colcon build
+        --symlink-install`` 安装的场景）；若以**非符号链接**方式安装，源码树路径
+        失效，则回退到 ``share/<package>/models/``（由 setup.py 的 data_files 安装）。
+        """
+        if os.path.exists(_MODEL_REL):
+            return _MODEL_REL
+        try:
+            from ament_index_python.packages import get_package_share_directory
+            share = os.path.join(get_package_share_directory("humanoid_push_recovery"),
+                                 "models", "humanoid_balance.xml")
+            if os.path.exists(share):
+                return share
+        except Exception:                                         # noqa: BLE001
+            pass
+        return _MODEL_REL
+
     def reset(self):
         mujoco.mj_resetData(self.model, self.data)
         mujoco.mj_forward(self.model, self.data)
@@ -151,20 +171,21 @@ class BalanceSim:
         })
 
     def step(self, balance=True):
-        """推进一步仿真：站姿 PD（+ 可选平衡修正）→ 施加扰动 → mj_step。"""
+        """推进一步仿真：站姿 PD + 平衡力矩 → 施加扰动 → mj_step。"""
         q = self.data.qpos[self.joint_qadr]
         qd = self.data.qvel[self.joint_dadr]
 
-        # 1) 站姿 PD：目标为直立位（全 0），平衡控制器给出关节目标修正量
-        target = np.zeros(len(JOINT_NAMES))
-        if balance and self.controller is not None:
-            target = self.controller.compute(self)
-        ctrl = self.KP * (target - q) - self.KV * qd
+        # 1) 站姿 PD：目标为直立位（全 0）
+        ctrl = self.KP * (0.0 - q) - self.KV * qd
         for qi in self.roll_idx:
-            ctrl[qi] = self.KP_ROLL * (target[qi] - q[qi]) - self.KV * qd[qi]
+            ctrl[qi] = self.KP_ROLL * (0.0 - q[qi]) - self.KV * qd[qi]
+
+        # 2) 叠加平衡控制器输出的**关节力矩**修正量 (N·m)
+        if balance and self.controller is not None:
+            ctrl = ctrl + self.controller.compute(self)
         self.data.ctrl[:] = np.clip(ctrl, -self.TORQUE_LIMIT, self.TORQUE_LIMIT)
 
-        # 2) 外力扰动（施加在 torso 上）
+        # 3) 外力扰动（施加在 torso 上）
         self.data.xfrc_applied[self.torso_id, :] = 0.0
         if self._push_left > 0.0:
             self.data.xfrc_applied[self.torso_id, 0:3] = self._push_fx
@@ -237,11 +258,20 @@ class BalanceSim:
                     pts.append(center + rot @ np.array([sx * size[0], sy * size[1], -size[2]]))
         return np.array(pts)
 
-    def read_state(self):
-        """一次性读取控制与评价所需的全部状态。"""
+    def foot_polygon(self):
+        """支撑多边形（脚底 8 角点在 xy 平面的凸包，逆时针）。"""
+        from .balance import convex_hull
+        return convex_hull(self.foot_corners()[:, :2])
+
+    def read_state(self, with_margin=False):
+        """一次性读取控制与评价所需的全部状态。
+
+        ``with_margin=True`` 时额外计算支撑多边形与稳定裕度（供评价与话题发布使用）；
+        控制回路内默认关闭，以免每步都做一次几何计算影响吞吐。
+        """
         com = self.com_position()
         acc = self.com_acceleration()
-        return {
+        state = {
             "time": float(self.data.time),
             "com": com,
             "com_vel": self.com_velocity(),
@@ -251,6 +281,15 @@ class BalanceSim:
             "tilt": self.torso_tilt(),
             "fallen": self.fallen(),
         }
+        if with_margin:
+            from .balance import stability_margin
+            polygon = self.foot_polygon()
+            state["support_polygon"] = polygon
+            state["stability_margin"] = stability_margin(
+                com, state["com_vel"], com[2], polygon)
+            state["static_margin"] = stability_margin(
+                com, state["com_vel"], com[2], polygon, use_capture_point=False)
+        return state
 
     def fallen(self):
         """是否跌倒：根高过低或躯干倾角过大。"""
@@ -274,19 +313,32 @@ class BalanceSim:
 
 
 def load_params(path=None):
-    """读取 config/params.yaml，返回扁平参数字典。"""
+    """读取 config/params.yaml，返回扁平参数字典（standalone 与 ROS2 共用同一文件）。
+
+    兼容三种结构，优先级从高到低：
+      1. 按节点分节 ``/balance_sim_node: {ros__parameters: {...}}``（本模块采用）；
+      2. 通配节点 ``/**`` 下的 ``ros__parameters``；
+      3. 扁平结构（直接就是参数字典）。
+    """
     import yaml
     path = path or os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "config", "params.yaml")
     with open(path, encoding="utf-8") as handle:
         raw = yaml.safe_load(handle) or {}
-    section = raw
-    wildcard = raw.get("/**") if isinstance(raw, dict) else None
-    if isinstance(wildcard, dict) and isinstance(wildcard.get("ros__parameters"), dict):
-        section = wildcard["ros__parameters"]
-    elif isinstance(raw, dict) and isinstance(raw.get("ros__parameters"), dict):
-        section = raw["ros__parameters"]
-    return dict(section) if isinstance(section, dict) else {}
+    if not isinstance(raw, dict):
+        return {}
+
+    def section_of(key):
+        node = raw.get(key)
+        if isinstance(node, dict) and isinstance(node.get("ros__parameters"), dict):
+            return node["ros__parameters"]
+        return None
+
+    for key in ("/balance_sim_node", "balance_sim_node", "/**"):
+        section = section_of(key)
+        if section is not None:
+            return dict(section)
+    return {k: v for k, v in raw.items() if not isinstance(v, dict)}
 
 
 def open_viewer(sim, log=None):

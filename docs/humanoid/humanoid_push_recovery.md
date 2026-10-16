@@ -5,11 +5,12 @@
 力矩站立；模块实现 **ZMP / 捕获点稳定性判据** 与 **踝策略 + 髋策略** 的恢复控制律，
 并定量给出「扰动力 → 最大质心偏移 → 恢复 / 跌倒」的完整恢复包线。
 
-与仓库内其它人形模块的区别：
+与同分类其它人形模块的区别（下列模块在各自的 PR 中提交，**尚未合并到本分支**，
+为避免死链此处只做文字对比、不提供跳转）：
 
 | 模块 | 输入 | 关注点 |
 |---|---|---|
-| [humanoid_keyboard_control](./humanoid_keyboard_control.md) | 键盘速度指令 | 指令执行准确性（运动学层面） |
+| humanoid_keyboard_control | 键盘速度指令 | 指令执行准确性（运动学层面） |
 | humanoid_gait_control | 步态周期 | 行走步态生成与跟踪 |
 | **humanoid_push_recovery（本模块）** | **外力扰动** | **外力下的稳定性判据与恢复能力** |
 
@@ -30,8 +31,8 @@
         │  关节目标修正                             │
    ┌────┴─────────────────────────┐                │
    │ 平衡控制器 BalanceController  │                │
-   │ · 踝策略：质心偏移/速度 → 踝   │                │
-   │ · 髋策略：角动量修正           │                │
+   │ · 踝策略：质心偏移/速度 → 踝力矩 │                │
+   │ · 髋策略：角动量 → 髋力矩       │                │
    └────▲─────────────────────────┘                │
         │                                          │
    ┌────┴─────────────────────────┐                │
@@ -88,7 +89,7 @@ python3 main.py --direction 90   # 扰动方向（0=前向, 90=侧向, 180=后�
 python3 main.py --no-hip         # 关闭髋策略（仅踝策略，对照用）
 python3 main.py --sweep          # 测定各方向临界冲量并与策略对照
 python3 main.py --capture assets_out  # 采集关键帧/动图/曲线/metrics.json
-python3 main.py --test           # 自动化测试（23 项）
+python3 main.py --test           # 自动化测试（31 项）
 ```
 
 若运行的是 2.2 节拷贝到工作空间的那一份，路径为
@@ -147,9 +148,8 @@ standalone 演示与 `ros2 launch` **默认都会打开 MuJoCo 可视化窗口**
 ### 3.1 自建双足模型（models/humanoid_balance.xml）
 
 15 关节 = 双腿（髋 roll / 髋 pitch / 膝 pitch / 踝 pitch / 踝 roll）×2 + 双臂
-（肩 pitch / 肘 pitch）×2 + 颈 ×1，全部由 `motor` 驱动。与
-[humanoid_keyboard_control](./humanoid_keyboard_control.md) 的
-`humanoid_simple.xml` 的关键区别：
+（肩 pitch / 肘 pitch）×2 + 颈 ×1，全部由 `motor` 驱动。与同分类其它模块自建双足
+模型的关键区别：
 
 - **底盘 freejoint 不做速度锁定**：机器人的站立完全由双脚与地面的接触力和关节力矩决定；
 - 脚掌前后长度加大到 0.22 m，以获得更大的踝关节力矩权限；
@@ -184,39 +184,48 @@ i \in \{\text{髋/膝/踝/肩/肘/颈}\}
 > 实现注记：实测在 MuJoCo 3.16 中 `data.subtree_linvel[0]` 恒为 0，
 > 因此质心速度统一由 `data.subtree_com[0]` 的有限差分求得（见 `sim_core.py`）。
 
-### 3.4 恢复控制律：踝策略 + 髋策略
+### 3.4 恢复控制律：踝策略 + 髋策略（输出关节力矩）
 
-**踝策略（主力）**：以质心相对参考位置的偏移与质心速度为反馈，调整踝 pitch / roll
-的关节目标：
+平衡控制器输出的是**关节力矩修正量**（N·m），而不是关节目标角度。原因：踝 pitch
+关节的实际行程只有 ±0.9 rad，若用「关节目标」表达平衡修正，为获得足够的恢复力矩
+必须下发远超行程的目标（例如 3 rad ≈ 172°），既不合理、又会立刻被关节限位截断，
+物理含义模糊。改用**力矩量纲**后，限幅直接表示关节力矩权限，整定也更有依据。
+
+**踝策略（主力）**：以质心相对参考位置的偏移与质心速度为反馈，给出踝 pitch / roll
+的恢复力矩：
 
 \[
-q^{\mathrm{ankle}} = k_p^{a}\,(x_{\mathrm{com}}-x_{\mathrm{ref}}) + k_d^{a}\,v_{\mathrm{com},x}
+\tau^{\mathrm{ankle}} = k_p^{a}\,(x_{\mathrm{com}}-x_{\mathrm{ref}}) + k_d^{a}\,v_{\mathrm{com},x},
+\qquad |\tau^{\mathrm{ankle}}| \le \tau^{a}_{\max}
 \]
 
 **髋策略（增强）**：踝策略饱和后，通过摆动上半身产生角动量继续把质心拉回：
 
 \[
-q^{\mathrm{hip}} = -k_p^{h}\,(x_{\mathrm{com}}-x_{\mathrm{ref}}) - k_d^{h}\,v_{\mathrm{com},x}
+\tau^{\mathrm{hip}} = -k_p^{h}\,(x_{\mathrm{com}}-x_{\mathrm{ref}}) - k_d^{h}\,v_{\mathrm{com},x},
+\qquad |\tau^{\mathrm{hip}}| \le \tau^{h}_{\max}
 \]
 
+力矩由 `sim_core.step()` 叠加到站姿 PD 力矩上，再一并限幅到 `torque_limit`。
 （髋策略可开关：`hip_enable` / `--no-hip`，用于「仅踝 vs 踝+髋」对照实验。）
 
 ### 3.5 符号约定与整定（踩过的坑，供复现参考）
 
 控制律的**符号若写反，会形成正反馈直接把机器人推倒**，因此模块把符号自检写进了
-自动化测试（测试项 5）。实测符号约定：
+自动化测试（测试项 7，四个方向逐一标定）。实测符号约定（均指**正力矩**）：
 
-| 关节 | 目标增大时质心移动方向 | 控制律符号 |
+| 关节 | 正力矩作用下质心移动方向 | 控制律符号 |
 |---|---|---|
 | 踝 pitch | **向后**（−x） | `+(k_p e_x + k_d v_x)` |
-| 踝 roll | **向 +y** | `−(k_p e_y + k_d v_y)` |
+| 踝 roll | **向 +y（左）** | `−(k_p e_y + k_d v_y)` |
 | 髋 pitch | 向前（+x） | `−(k_p e_x + k_d v_x)` |
-| 髋 roll | 向 −y | `+(k_p e_y + k_d v_y)` |
+| 髋 roll | 向 −y（右） | `+(k_p e_y + k_d v_y)` |
 
-另一个关键整定点：**侧向 roll 关节的力矩权限远大于 pitch**，若沿用 pitch 的增益
-（`kp=45, kd=12`），踝 roll 目标会饱和到 ±3 rad，产生约 300 N·m 的滚转力矩把机器人
-**抛离地面**（根高从 1.084 m 跳到 1.203 m）而立刻跌倒。因此侧向单独整定并单独限幅
-（`kp_ankle_roll=12`、`kd_ankle_roll=1.5`、`ankle_roll_limit=0.45`）。
+另一个关键整定点：**侧向 roll 关节的力矩权限远大于 pitch**。早期实现用「关节目标」
+表达控制量时，沿用 pitch 的增益（等价于约 300 N·m 的滚转力矩）会把机器人
+**抛离地面**（根高从 1.084 m 跳到 1.203 m）而立刻跌倒；改为力矩量纲后，侧向单独整定
+并单独限幅（`kp_ankle_roll=4800 N·m/m`、`kd_ankle_roll=600 N·m·s/m`、
+`ankle_roll_torque_limit=180 N·m`，约为 pitch 的 60%）。
 
 ### 3.6 能力边界（重要）
 
@@ -272,9 +281,9 @@ q^{\mathrm{hip}} = -k_p^{h}\,(x_{\mathrm{com}}-x_{\mathrm{ref}}) - k_d^{h}\,v_{\
 
 | 扰动 | 最大质心偏移 | 恢复时间 |
 |---|---|---|
-| 前向 120 N (9.6 N·s) | **38 mm** | **0.92 s** |
-| 侧向 150 N (12.0 N·s) | **34 mm** | **0.67 s** |
-| 斜向 120 N (9.6 N·s) | 15 mm | 0.59 s |
+| 前向 120 N (9.6 N·s) | **37.8 mm** | **0.91 s** |
+| 侧向 150 N (12.0 N·s) | **34.3 mm** | **0.67 s** |
+| 斜向 45° 120 N (9.6 N·s) | 14.7 mm | 0.59 s |
 
 恢复后质心残差 0.11 mm（判据：偏移 < 5 mm 且速度 < 0.02 m/s）。
 
@@ -282,15 +291,15 @@ q^{\mathrm{hip}} = -k_p^{h}\,(x_{\mathrm{com}}-x_{\mathrm{ref}}) - k_d^{h}\,v_{\
 
 | 方向 | 仅踝策略 | 踝+髋策略 | 提升 |
 |---|---|---|---|
-| 前向 (+x) | 162.7 N / **13.01 N·s** | 181.8 N / **14.55 N·s** | **+11.8%** |
+| 前向 (+x) | 152.5 N / **12.20 N·s** | 172.7 N / **13.82 N·s** | **+13.2%** |
 | 侧向 (+y) | 227.2 N / **18.17 N·s** | 285.3 N / **22.82 N·s** | **+25.6%** |
-| 后向 (−x) | 42.7 N / 3.42 N·s | 44.7 N / 3.58 N·s | +4.7% |
+| 后向 (−x) | 42.7 N / 3.42 N·s | 44.8 N / 3.58 N·s | +4.8% |
 
 **结论与分析**：
 
 1. **踝策略是站立抗扰的主力**，髋策略在不改变任何硬件参数的前提下把可恢复冲量
-   提升 11.8%（前向）/ 25.6%（侧向），同时降低了最大偏移与恢复时间；
-2. **侧向抗扰能力显著强于前向**（18.17 vs 13.01 N·s），因为双足站立时侧向支撑宽度
+   提升 13.2%（前向）/ 25.6%（侧向），同时降低了最大偏移与恢复时间；
+2. **侧向抗扰能力显著强于前向**（18.17 vs 12.20 N·s），因为双足站立时侧向支撑宽度
    （460 mm，靠双足共同支撑）大于前后支撑长度（220 mm，靠单脚脚掌）；
 3. **后向抗扰最弱**（3.42 N·s），因为脚掌在踝关节前方的延伸（0.12 m）明显长于后方
    （0.07 m），向后倾覆时可用的踝关节力矩权限最小——这解释了为什么人从背后被推更容易
@@ -302,13 +311,14 @@ q^{\mathrm{hip}} = -k_p^{h}\,(x_{\mathrm{com}}-x_{\mathrm{ref}}) - k_d^{h}\,v_{\
 
 | 指标 | 结果 |
 |---|---|
-| 仿真吞吐 | 16,047 step/s |
-| 实时因子 | 32.1× |
+| 仿真吞吐 | 17,779 step/s |
+| 实时因子 | 35.6× |
 
 ## 6. 参考
 
 * [人形机器人基础](./humanoid_basics.md)
-* [人形机器人键盘运动控制](./humanoid_keyboard_control.md)：本包 ROS2 包结构惯例参考
+* 本包 ROS2 包结构（`package.xml` / `setup.py` / `launch` / `config`）参照仓库内
+  既有模块的 ament_python 惯例
 * [MuJoCo 文档：freejoint / xfrc_applied / Renderer](https://mujoco.readthedocs.io/en/stable/XMLreference.html)
 * 线性倒立摆与捕获点：Kajita et al., *Biped Walking Pattern Generation by using Preview
   Control of Zero-Moment Point*, ICRA 2003；Pratt et al., *Capture Point: A Step toward

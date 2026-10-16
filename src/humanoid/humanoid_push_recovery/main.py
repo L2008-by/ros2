@@ -107,13 +107,16 @@ def run_check(params, model_path=None) -> int:
 # ----------------------------------------------------------------------
 # 模式 2：演示
 # ----------------------------------------------------------------------
-def run_demo(params, force=None, direction=0.0, hip_enable=None, capture_dir=None,
+def run_demo(params, force=None, direction=None, hip_enable=None, capture_dir=None,
              viewer=True, verbose=True, model_path=None):
     """施加一次扰动并记录恢复过程；可选打开可视化窗口与采集素材。"""
     p = dict(params)
     if hip_enable is not None:
         p["hip_enable"] = bool(hip_enable)
     force = float(force if force is not None else p.get("push_force", 120.0))
+    # 方向未显式指定时读取 params.yaml 的 push_direction_deg（默认 0° = 前向）
+    direction = float(direction if direction is not None
+                      else p.get("push_direction_deg", 0.0))
     duration = float(p.get("push_duration", 0.08))
 
     sim = BalanceSim(model_path=model_path, params=p)
@@ -154,8 +157,8 @@ def run_demo(params, force=None, direction=0.0, hip_enable=None, capture_dir=Non
         if i % 5 == 0:
             series.append({"t": float(sim.data.time), "offset": offset,
                            "tilt": sim.torso_tilt(), "zmp": sim.zmp().tolist(),
-                           "ankle_cmd": sim.controller.last.get("ankle_cmd"),
-                           "hip_cmd": sim.controller.last.get("hip_cmd")})
+                           "ankle_tau": sim.controller.last.get("ankle_tau"),
+                           "hip_tau": sim.controller.last.get("hip_tau")})
         if sim.fallen():
             fell_at = float(sim.data.time)
             break
@@ -190,8 +193,9 @@ def run_demo(params, force=None, direction=0.0, hip_enable=None, capture_dir=Non
         "fell_at_s": fell_at,
         "final_tilt_deg": float(np.degrees(sim.torso_tilt())),
         "final_root_height_m": sim.root_height(),
-        "ankle_limit_rad": p.get("ankle_limit"),
-        "hip_limit_rad": p.get("hip_limit"),
+        "ankle_torque_limit_nm": p.get("ankle_torque_limit"),
+        "hip_torque_limit_nm": p.get("hip_torque_limit"),
+        "hip_enable_param": bool(p.get("hip_enable", True)),
     }
 
     if verbose:
@@ -253,7 +257,7 @@ def capture_assets(frames, series, capture_dir, metrics):
         t = [s["t"] for s in series]
         off = [s["offset"] * 1000.0 for s in series]
         tilt = [np.degrees(s["tilt"]) for s in series]
-        ankle = [s["ankle_cmd"] if s["ankle_cmd"] is not None else 0.0 for s in series]
+        ankle = [s["ankle_tau"] if s["ankle_tau"] is not None else 0.0 for s in series]
         fig, ax = plt.subplots(2, 1, figsize=(7, 5), sharex=True)
         ax[0].plot(t, off, color="tab:blue", label="CoM offset (mm)")
         ax[0].axhline(5.0, color="tab:green", ls="--", lw=1, label="recover threshold 5 mm")
@@ -264,7 +268,7 @@ def capture_assets(frames, series, capture_dir, metrics):
         ax[0].set_title(f"push {metrics['force_n']:.0f} N -> "
                         f"{'FALL' if metrics['fell'] else 'RECOVERED'}")
         ax[1].plot(t, tilt, color="tab:orange", label="torso tilt (deg)")
-        ax[1].plot(t, ankle, color="tab:purple", lw=1, label="ankle cmd (rad)")
+        ax[1].plot(t, ankle, color="tab:purple", lw=1, label="ankle torque cmd (N*m)")
         ax[1].set_xlabel("time (s)")
         ax[1].legend(loc="upper right")
         fig.tight_layout()
@@ -359,8 +363,9 @@ def main():
     parser.add_argument("--config", default=None, help="参数文件 (YAML)")
     parser.add_argument("--model", default=None, help="MJCF 模型路径")
     parser.add_argument("--force", type=float, default=None, help="扰动力大小 (N)")
-    parser.add_argument("--direction", type=float, default=0.0,
-                        help="扰动方向（度；0=前向, 90=侧向, 180=后向）")
+    parser.add_argument("--direction", type=float, default=None,
+                        help="扰动方向（度；0=前向, 90=侧向, 180=后向）；"
+                             "不指定时读取 params.yaml 的 push_direction_deg")
     parser.add_argument("--no-hip", dest="hip", action="store_false",
                         help="关闭髋策略（仅踝策略）")
     parser.set_defaults(hip=None)

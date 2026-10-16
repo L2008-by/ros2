@@ -32,10 +32,10 @@ from tf2_ros import TransformBroadcaster
 
 try:
     from humanoid_push_recovery.balance import (
-        BalanceController, capture_point, convex_hull, distance_to_boundary)
+        BalanceController, capture_point, stability_margin)
     from humanoid_push_recovery.sim_core import JOINT_NAMES, BalanceSim, open_viewer
 except ImportError:                                     # 直接以脚本方式运行时的兜底
-    from balance import BalanceController, capture_point, convex_hull, distance_to_boundary
+    from balance import BalanceController, capture_point, stability_margin
     from sim_core import JOINT_NAMES, BalanceSim, open_viewer
 
 
@@ -50,11 +50,17 @@ class BalanceSimNode(Node):
             ('model_path', ''), ('sim_rate', 500.0), ('publish_rate', 30.0),
             ('visualize', True), ('kp', 120.0), ('kv', 6.0), ('kp_roll', 400.0),
             ('torque_limit', 300.0), ('fall_height', 0.85), ('fall_tilt', 0.55),
-            ('kp_ankle', 45.0), ('kd_ankle', 12.0), ('ankle_limit', 3.0),
-            ('kp_ankle_roll', 12.0), ('kd_ankle_roll', 1.5), ('ankle_roll_limit', 0.45),
-            ('hip_enable', True), ('kp_hip', 4.0), ('kd_hip', 0.6),
-            ('kp_hip_roll', 4.0), ('kd_hip_roll', 0.6), ('hip_limit', 0.45),
+            # 平衡控制器参数为**力矩量纲**（N·m 及其增益），与 config/params.yaml 一致
+            ('kp_ankle', 5400.0), ('kd_ankle', 1440.0), ('ankle_torque_limit', 300.0),
+            ('kp_ankle_roll', 4800.0), ('kd_ankle_roll', 600.0),
+            ('ankle_roll_torque_limit', 180.0),
+            ('hip_enable', True), ('kp_hip', 480.0), ('kd_hip', 72.0),
+            ('hip_torque_limit', 54.0), ('kp_hip_roll', 1600.0),
+            ('kd_hip_roll', 240.0), ('hip_roll_torque_limit', 180.0),
             ('push_duration', 0.08),
+            # 下列两项供 standalone / 遥控节点使用；仿真节点一并声明，
+            # 以保证与 params.yaml 的 /balance_sim_node 段参数项一一对应
+            ('push_force', 120.0), ('push_direction_deg', 0.0),
         ):
             self.declare_parameter(name, default)
 
@@ -69,15 +75,16 @@ class BalanceSimNode(Node):
             'fall_tilt': val('fall_tilt').double_value,
             'kp_ankle': val('kp_ankle').double_value,
             'kd_ankle': val('kd_ankle').double_value,
-            'ankle_limit': val('ankle_limit').double_value,
+            'ankle_torque_limit': val('ankle_torque_limit').double_value,
             'kp_ankle_roll': val('kp_ankle_roll').double_value,
             'kd_ankle_roll': val('kd_ankle_roll').double_value,
-            'ankle_roll_limit': val('ankle_roll_limit').double_value,
+            'ankle_roll_torque_limit': val('ankle_roll_torque_limit').double_value,
             'hip_enable': val('hip_enable').bool_value,
             'kp_hip': val('kp_hip').double_value, 'kd_hip': val('kd_hip').double_value,
+            'hip_torque_limit': val('hip_torque_limit').double_value,
             'kp_hip_roll': val('kp_hip_roll').double_value,
             'kd_hip_roll': val('kd_hip_roll').double_value,
-            'hip_limit': val('hip_limit').double_value,
+            'hip_roll_torque_limit': val('hip_roll_torque_limit').double_value,
         }
         self.push_duration = val('push_duration').double_value
         self.visualize = val('visualize').bool_value
@@ -176,7 +183,8 @@ class BalanceSimNode(Node):
     def _publish_callback(self):
         """发布质心 / ZMP / 捕获点 / 稳定裕度 / 状态 / 关节状态 / TF。"""
         now = self.get_clock().now().to_msg()
-        state = self.sim.read_state()
+        # with_margin=True：额外计算支撑多边形与稳定裕度（控制回路内不需要）
+        state = self.sim.read_state(with_margin=True)
         com, vel = state["com"], state["com_vel"]
 
         # --- 质心 ---
@@ -202,9 +210,8 @@ class BalanceSimNode(Node):
         msg.point.x, msg.point.y, msg.point.z = float(xi[0]), float(xi[1]), 0.0
         self.pub_cp.publish(msg)
 
-        # --- 稳定裕度（捕获点到支撑多边形边界的距离）---
-        hull = convex_hull(self.sim.foot_corners()[:, :2])
-        margin = distance_to_boundary(xi, hull)
+        # --- 稳定裕度（捕获点到支撑多边形边界的距离，见 balance.stability_margin）---
+        margin = state["stability_margin"]
         self.pub_margin.publish(Float64(data=float(margin)))
 
         # --- 平衡状态 ---

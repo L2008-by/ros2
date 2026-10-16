@@ -29,14 +29,15 @@ from rclpy.node import Node
 from geometry_msgs.msg import Vector3
 from std_msgs.msg import Empty
 
-# 按键 -> (方向角(度), 力度符号)；方向角 0° = +x 前向，90° = +y 左向
+# 按键 -> 方向角(度)。坐标约定：0° = +x 前向，+y 为机器人左侧（右手系），
+# 故 45° = 左前、135° = 左后、225° = 右后、315° = 右前。
 KEY_DIRECTIONS = {
     'w': 0.0,      # 前
     's': 180.0,    # 后
     'a': 90.0,     # 左
     'd': 270.0,    # 右
-    'q': 135.0,    # 左前
-    'e': 315.0,    # 右后
+    'q': 45.0,     # 左前
+    'e': 225.0,    # 右后
     'KEY_UP': 0.0,
     'KEY_DOWN': 180.0,
     'KEY_LEFT': 90.0,

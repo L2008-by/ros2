@@ -107,12 +107,27 @@ def run_trial(params, force=120.0, direction_deg=0.0, hip_enable=None,
 
 
 def critical_force(params, direction_deg=0.0, hip_enable=None,
-                   lo=10.0, hi=600.0, iterations=14, **kwargs):
+                   lo=10.0, hi=600.0, iterations=14, check_bounds=True, **kwargs):
     """二分法测定给定方向上的最大可恢复力 (N)。
 
     ``lo`` 为已知可恢复的力，``hi`` 为已知会跌倒的力；二分 ``iterations`` 次后
     返回可恢复的最大力，精度约 ``(hi-lo)/2**iterations``。
+
+    ``check_bounds=True``（默认）会先验证两个边界假设成立——二分法只有在
+    「lo 可恢复、hi 会跌倒」时才收敛到临界值，否则结果无意义，因此这里做了前置校验，
+    不成立时直接抛出 ``ValueError`` 而不是返回一个看似合理的错误数字。
     """
+    if check_bounds:
+        if run_trial(params, force=lo, direction_deg=direction_deg,
+                     hip_enable=hip_enable, **kwargs)["fell"]:
+            raise ValueError(
+                f"二分法下界不成立：{lo} N 在方向 {direction_deg}° 下未能恢复，"
+                f"请调小 lo 或检查参数")
+        if not run_trial(params, force=hi, direction_deg=direction_deg,
+                         hip_enable=hip_enable, **kwargs)["fell"]:
+            raise ValueError(
+                f"二分法上界不成立：{hi} N 在方向 {direction_deg}° 下竟然恢复，"
+                f"请调大 hi")
     for _ in range(int(iterations)):
         mid = 0.5 * (lo + hi)
         if run_trial(params, force=mid, direction_deg=direction_deg,

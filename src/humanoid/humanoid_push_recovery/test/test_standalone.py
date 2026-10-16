@@ -7,17 +7,21 @@ test_standalone.py —— 平衡与抗扰恢复模块自动化测试（无 ROS �
 测试项
 ------
 1.  模型加载：自由度 / 执行器数量 / 关节数量；
-2.  支撑多边形：脚底 8 角点凸包有效，静立时质心投影在支撑多边形内且有裕度；
-3.  捕获点与 ZMP 计算有效；
-4.  自由站立稳定性：无扰动 8 s 不跌倒且质心漂移 < 5 mm；
-5.  踝策略符号自检：踝 pitch 目标增大 → 质心向后移动（控制律符号来源）；
-6.  对照实验：关闭平衡控制器时同样扰动必然跌倒；
-7.  前向抗扰恢复：120 N 推扰可恢复，最大偏移与恢复时间在上界内；
-8.  侧向抗扰恢复：150 N 侧向推扰可恢复；
-9.  策略对比：踝+髋策略的临界冲量不低于仅踝策略；
-10. 恢复残差：恢复后质心残差 < 5 mm；
-11. 跌倒判定：超大扰动下正确判为跌倒且根高/倾角越界；
-12. 仿真性能：实时因子满足演示要求。
+2.  底盘 freejoint 未被速度锁定（与「靠改写速度站住」的模块区分开）；
+3.  支撑多边形：脚底 8 角点凸包有效，静立时质心投影在多边形内且有裕度；
+4.  ZMP 与捕获点计算有效，且捕获点随质心速度前移；
+5.  稳定裕度：实现为「捕获点到支撑多边形边界的距离」，多边形外返回负值；
+6.  自由站立稳定性：无扰动 8 s 不跌倒且质心漂移 < 5 mm；
+7.  控制律符号自检：踝 pitch/roll、髋 pitch/roll 四个方向的正力矩作用正确
+    （符号写反会形成正反馈直接推倒机器人，是控制律正确性的前提）；
+8.  对照实验：关闭平衡控制器时同样扰动必然跌倒；
+9.  前向抗扰恢复：120 N 推扰可恢复，最大偏移与恢复时间在上界内；
+10. 侧向抗扰恢复：150 N 侧向推扰可恢复；
+11. 策略对比：踝+髋策略的临界冲量不低于仅踝策略；
+12. 恢复残差：恢复后质心残差 < 5 mm；
+13. 二分法前置校验：边界假设不成立时抛出异常而非返回错误结果；
+14. 跌倒判定：超大扰动下正确判为跌倒且根高/倾角越界；
+15. 仿真性能：实时因子满足演示要求。
 
 运行方式（包根目录）::
 
@@ -26,7 +30,6 @@ test_standalone.py —— 平衡与抗扰恢复模块自动化测试（无 ROS �
 
 from __future__ import annotations
 
-import math
 import os
 import sys
 import time
@@ -38,9 +41,9 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
 
 from humanoid_push_recovery.balance import (                              # noqa: E402
-    BalanceController, capture_point, convex_hull, distance_to_boundary)
-from humanoid_push_recovery.evaluate import (                             # noqa: E402
-    critical_force, run_trial)
+    BalanceController, capture_point, convex_hull, distance_to_boundary,
+    point_in_polygon, stability_margin)
+from humanoid_push_recovery.evaluate import critical_force, run_trial     # noqa: E402
 from humanoid_push_recovery.sim_core import (                             # noqa: E402
     JOINT_NAMES, BalanceSim, load_params)
 
@@ -75,9 +78,38 @@ def make_sim(balance=True):
     return sim
 
 
+class _FixedTorque:
+    """固定关节力矩控制器（仅用于符号自检，替代默认平衡控制器）。"""
+
+    def __init__(self, torque_map):
+        self.torque_map = dict(torque_map)
+
+    def reset(self, sim=None):
+        pass
+
+    def compute(self, sim):
+        torque = np.zeros(len(JOINT_NAMES))
+        for name, value in self.torque_map.items():
+            torque[JOINT_NAMES.index(name)] = value
+        return torque
+
+
+def _fixed_torque_trial(torque_map, steps=400):
+    """施加固定关节力矩，返回质心水平位移 (dx, dy)。"""
+    sim = BalanceSim(params=PARAMS)
+    sim.controller = _FixedTorque(torque_map)
+    sim.reset()
+    p0 = sim.com_position()[:2].copy()
+    for _ in range(steps):
+        sim.step()
+    delta = sim.com_position()[:2] - p0
+    sim.close()
+    return delta
+
+
 # ----------------------------------------------------------------------
 def test_model():
-    """1. 模型与执行器。"""
+    """1~2. 模型与执行器。"""
     sim = make_sim()
     check("模型加载与执行器数量",
           sim.model.nq > 0 and sim.model.nu == len(JOINT_NAMES) and len(JOINT_NAMES) == 15,
@@ -89,16 +121,16 @@ def test_model():
 
 
 def test_support_polygon():
-    """2. 支撑多边形与稳定裕度。"""
+    """3. 支撑多边形与质心投影裕度。"""
     sim = make_sim()
     corners = sim.foot_corners()
-    hull = convex_hull(corners[:, :2])
+    hull = sim.foot_polygon()
     com = sim.com_position()
     margin = distance_to_boundary(com[:2], hull)
     check("脚底 8 角点构成有效凸包", corners.shape == (8, 3) and len(hull) >= 3,
           f"(角点 {corners.shape}, 凸包顶点 {len(hull)})")
     check("静立时质心投影落在支撑多边形内且有裕度", margin > 0.02,
-          f"(稳定裕度 {margin * 1000:.1f} mm)")
+          f"(静态裕度 {margin * 1000:.1f} mm)")
     sx = corners[:, 0].max() - corners[:, 0].min()
     sy = corners[:, 1].max() - corners[:, 1].min()
     check("侧向支撑宽度大于前后支撑长度（双足站立特征）", sy > sx,
@@ -107,7 +139,7 @@ def test_support_polygon():
 
 
 def test_balance_criteria():
-    """3. ZMP 与捕获点。"""
+    """4. ZMP 与捕获点。"""
     sim = make_sim()
     com = sim.com_position()
     zmp = sim.zmp()
@@ -118,16 +150,40 @@ def test_balance_criteria():
     check("捕获点计算有限且与质心量纲一致",
           np.all(np.isfinite(xi)) and abs(float(xi[0] - com[0])) < 0.2,
           f"(捕获点 {np.round(xi, 4)} m)")
-
-    # 手动给一个水平速度，验证捕获点随速度前移
     xi_fast = capture_point(com, np.array([0.5, 0.0, 0.0]), com[2])
     check("捕获点随质心速度前移", float(xi_fast[0]) > float(xi[0]),
           f"(v=0.5 m/s 时捕获点 x 前移 {float(xi_fast[0] - xi[0]) * 1000:.0f} mm)")
     sim.close()
 
 
+def test_stability_margin():
+    """5. 稳定裕度：必须是「捕获点到支撑多边形边界的距离」。"""
+    sim = make_sim()
+    state = sim.read_state(with_margin=True)
+    polygon = state["support_polygon"]
+    margin = state["stability_margin"]
+    static = state["static_margin"]
+    check("read_state 输出支撑多边形与稳定裕度",
+          polygon is not None and len(polygon) >= 3 and np.isfinite(margin),
+          f"(多边形 {len(polygon)} 顶点, 静态裕度 {static * 1000:.1f} mm, "
+          f"动态（捕获点）裕度 {margin * 1000:.1f} mm)")
+    check("静立时捕获点裕度与质心投影裕度接近（速度≈0）",
+          abs(margin - static) < 0.02,
+          f"(差 {abs(margin - static) * 1000:.2f} mm)")
+    # 实现正确性：多边形外的点必须返回负裕度（旧实现只返回捕获点坐标，无法通过此检查）
+    outside = np.array([polygon[:, 0].max() + 0.5, 0.0])
+    inside = np.array([polygon[:, 0].mean(), polygon[:, 1].mean()])
+    check("在多边形外返回负裕度、内部返回正裕度",
+          distance_to_boundary(outside, polygon) < 0
+          and distance_to_boundary(inside, polygon) > 0
+          and point_in_polygon(inside, polygon) and not point_in_polygon(outside, polygon),
+          f"(外部 {distance_to_boundary(outside, polygon):+.3f} m, "
+          f"内部 {distance_to_boundary(inside, polygon):+.3f} m)")
+    sim.close()
+
+
 def test_free_standing():
-    """4. 无扰动自由站立稳定性。"""
+    """6. 无扰动自由站立稳定性。"""
     sim = make_sim()
     ref = sim.com_position()
     max_drift = 0.0
@@ -143,32 +199,27 @@ def test_free_standing():
     sim.close()
 
 
-def test_ankle_sign():
-    """5. 踝策略符号自检（控制律符号来源，防止符号写反导致正反馈）。"""
-    sim = make_sim(balance=False)
-    y0 = sim.com_position()[0]
-    target = np.zeros(len(JOINT_NAMES))
-    target[JOINT_NAMES.index("ankle_pitch_l")] = 0.06
-    target[JOINT_NAMES.index("ankle_pitch_r")] = 0.06
-    for _ in range(400):
-        sim.data.ctrl[:] = 0.0
-        ctrl = sim.KP * (target - sim.data.qpos[sim.joint_qadr]) \
-            - sim.KV * sim.data.qvel[sim.joint_dadr]
-        for qi in sim.roll_idx:
-            ctrl[qi] = sim.KP_ROLL * (target[qi] - sim.data.qpos[sim.joint_qadr[qi]]) \
-                - sim.KV * sim.data.qvel[sim.joint_dadr[qi]]
-        sim.data.ctrl[:] = np.clip(ctrl, -sim.TORQUE_LIMIT, sim.TORQUE_LIMIT)
-        import mujoco
-        mujoco.mj_step(sim.model, sim.data)
-        sim._update_com()
-    dx = sim.com_position()[0] - y0
-    check("踝 pitch 目标增大 → 质心向后移动（控制律符号正确）", dx < -0.01,
-          f"(踝 +0.06 rad → 质心 Δx = {dx * 1000:+.1f} mm)")
-    sim.close()
+def test_control_sign():
+    """7. 控制律符号自检（平衡控制器输出的是关节力矩，故按力矩标定）。"""
+    d = _fixed_torque_trial({"ankle_pitch_l": 7.2, "ankle_pitch_r": 7.2})
+    check("踝 pitch 正力矩 → 质心向后（−x）", d[0] < -0.01,
+          f"(踝 +7.2 N·m → 质心 Δx = {d[0] * 1000:+.1f} mm)")
+
+    d = _fixed_torque_trial({"ankle_roll_l": 24.0, "ankle_roll_r": 24.0})
+    check("踝 roll 正力矩 → 质心向左（+y）", d[1] > 0.005,
+          f"(踝 roll +24 N·m → 质心 Δy = {d[1] * 1000:+.1f} mm)")
+
+    d = _fixed_torque_trial({"hip_pitch_l": 7.2, "hip_pitch_r": 7.2})
+    check("髋 pitch 正力矩 → 质心向前（+x）", d[0] > 0.001,
+          f"(髋 +7.2 N·m → 质心 Δx = {d[0] * 1000:+.1f} mm)")
+
+    d = _fixed_torque_trial({"hip_roll_l": 24.0, "hip_roll_r": 24.0})
+    check("髋 roll 正力矩 → 质心向右（−y）", d[1] < -0.005,
+          f"(髋 roll +24 N·m → 质心 Δy = {d[1] * 1000:+.1f} mm)")
 
 
 def test_no_balance_falls():
-    """6. 对照实验：无平衡控制器必然跌倒。"""
+    """8. 对照实验：无平衡控制器必然跌倒。"""
     r = run_trial(PARAMS, force=120.0, direction_deg=0.0, balance=False)
     check("关闭平衡控制器时 120 N 推扰即跌倒（对照成立）", bool(r["fell"]),
           f"(无平衡：{'跌倒' if r['fell'] else '竟未跌倒'}, "
@@ -176,7 +227,7 @@ def test_no_balance_falls():
 
 
 def test_forward_recovery():
-    """7. 前向抗扰恢复。"""
+    """9. 前向抗扰恢复。"""
     r = run_trial(PARAMS, force=120.0, direction_deg=0.0)
     check("前向 120 N 推扰可恢复", bool(r["recovered"]),
           f"(最大偏移 {r['max_offset_m'] * 1000:.0f} mm, "
@@ -189,7 +240,7 @@ def test_forward_recovery():
 
 
 def test_lateral_recovery():
-    """8. 侧向抗扰恢复。"""
+    """10. 侧向抗扰恢复。"""
     r = run_trial(PARAMS, force=150.0, direction_deg=90.0)
     check("侧向 150 N 推扰可恢复", bool(r["recovered"]),
           f"(最大偏移 {r['max_offset_m'] * 1000:.0f} mm, "
@@ -199,7 +250,7 @@ def test_lateral_recovery():
 
 
 def test_strategy_comparison():
-    """9~10. 策略对比与恢复残差。"""
+    """11~12. 策略对比与恢复残差。"""
     f_ankle = critical_force(PARAMS, direction_deg=0.0, hip_enable=False,
                              iterations=8, total=6.0)
     f_hip = critical_force(PARAMS, direction_deg=0.0, hip_enable=True,
@@ -217,8 +268,32 @@ def test_strategy_comparison():
           f"(残差 {resid * 1000:.2f} mm)" if resid is not None else "(未恢复)")
 
 
+def test_critical_force_bounds():
+    """13. 二分法前置校验。"""
+    raised = None
+    try:
+        # lo 取一个必然跌倒的力，边界假设不成立，应抛出异常
+        critical_force(PARAMS, direction_deg=0.0, hip_enable=False,
+                       lo=500.0, hi=600.0, iterations=2, total=6.0)
+    except ValueError as exc:
+        raised = str(exc)
+    check("二分法边界假设不成立时抛出 ValueError（不返回错误的临界值）",
+          raised is not None,
+          f"(已抛出：{raised[:36]}…)" if raised else "(未抛出异常)")
+
+    ok = True
+    try:
+        f = critical_force(PARAMS, direction_deg=0.0, hip_enable=False,
+                           iterations=6, total=6.0)
+    except ValueError:
+        ok = False
+        f = 0.0
+    check("二分法在边界成立时正常返回临界力", ok and f > 0,
+          f"(临界力 {f:.1f} N)")
+
+
 def test_fall_detection():
-    """11. 跌倒判定。"""
+    """14. 跌倒判定。"""
     r = run_trial(PARAMS, force=500.0, direction_deg=0.0)
     check("超大扰动被正确判为跌倒", bool(r["fell"]),
           f"(500 N 推扰 → {'跌倒' if r['fell'] else '竟恢复'})")
@@ -229,7 +304,7 @@ def test_fall_detection():
 
 
 def test_performance():
-    """12. 仿真吞吐。"""
+    """15. 仿真吞吐。"""
     sim = make_sim()
     steps = 2000
     start = time.perf_counter()
@@ -249,12 +324,14 @@ def main():
     test_model()
     test_support_polygon()
     test_balance_criteria()
+    test_stability_margin()
     test_free_standing()
-    test_ankle_sign()
+    test_control_sign()
     test_no_balance_falls()
     test_forward_recovery()
     test_lateral_recovery()
     test_strategy_comparison()
+    test_critical_force_bounds()
     test_fall_detection()
     test_performance()
     print("=" * 66)
