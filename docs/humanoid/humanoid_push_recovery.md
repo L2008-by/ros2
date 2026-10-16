@@ -260,8 +260,12 @@ i \in \{\text{髋/膝/踝/肩/肘/颈}\}
 
 ## 5. 验证结果
 
-以下数值全部由 `python3 main.py --sweep` 与 `python3 main.py --test` 在本机实测
-（Ubuntu 22.04 + MuJoCo 3.16，CPU 推理）。
+以下数值全部在 **Ubuntu 22.04.5 虚拟机（ROS2 Humble）** 中实测，环境为
+Ubuntu 22.04.5 LTS / Python 3.10.12 / MuJoCo 3.15.0 / numpy 1.21.5，2 vCPU。
+指令：`python3 main.py --sweep`、`python3 main.py --test`、`python3 main.py --check`。
+
+> 物理量（质心漂移、最大偏移、恢复时间、临界冲量）为确定性仿真结果，
+> 与机器无关；只有仿真吞吐是机器相关的（见 5.4）。
 
 ### 5.1 站立稳定性
 
@@ -311,8 +315,35 @@ i \in \{\text{髋/膝/踝/肩/肘/颈}\}
 
 | 指标 | 结果 |
 |---|---|
-| 仿真吞吐 | 17,779 step/s |
-| 实时因子 | 35.6× |
+| 仿真吞吐 | 9,433 step/s |
+| 实时因子 | 18.9× |
+
+> 吞吐随机器变化：同一模块在 Windows 主机（MuJoCo 3.16、多核）上为 17,779 step/s
+> （35.6×）；虚拟机为 2 vCPU，故约为一半。**两者都远超实时要求**（演示只需 >1×）。
+
+### 5.5 ROS2 集成验证（Ubuntu 22.04.5 + Humble 实测）
+
+在虚拟机中执行 `colcon build --symlink-install --packages-select humanoid_push_recovery`
+（构建 1.20 s 成功，两个可执行文件 `balance_sim_node` / `push_teleop_node` 注册正常），
+随后 `ros2 launch humanoid_push_recovery main.launch.py visualize:=false` 验证：
+
+| 验证项 | 命令 | 结果 |
+|---|---|---|
+| **参数文件确实被加载** | 先把 `config/params.yaml` 的 `kp_ankle` 改成显眼值 `12345.0`，再 `ros2 param get /balance_sim_node kp_ankle` | 返回 **12345.0** ✅（证明 launch 加载了 params.yaml，而非节点内硬编码默认值） |
+| launch 参数覆盖生效 | `ros2 param get /balance_sim_node visualize` | 返回 **False** ✅（`visualize:=false` 覆盖了参数文件里的 true） |
+| 按节点分节生效 | `ros2 param get /push_teleop_node force` | 返回 **120.0** ✅（遥控节点只读 `/push_teleop_node` 段） |
+| 话题完整 | `ros2 topic list` | `/balance/com`、`/balance/zmp`、`/balance/capture_point`、`/balance/stability_margin`、`/balance/status`、`/balance/push`、`/balance/reset`、`/joint_states`、`/tf` 共 9 个全部存在 ✅ |
+| 状态与裕度 | `ros2 topic echo /balance/status`、`/balance/stability_margin` | `stable` / **93.7 mm**（与 standalone 的 93.1 mm 一致）✅ |
+| **扰动—恢复闭环** | `ros2 topic pub --once /balance/push Vector3 "{x: 120.0}"` | 扰动后状态仍为 `stable`，质心偏移 **0.3 mm**、稳定裕度稳定在 **87.0 mm**，与 standalone 结果一致 ✅ |
+
+节点日志节选：
+
+```text
+[balance_sim_node]: 平衡仿真节点已启动 | 物理 500 Hz | 发布 30 Hz | 髋策略 开 | 模型 .../share/humanoid_push_recovery/models/humanoid_balance.xml
+[balance_sim_node]: status=stable     偏移=   0.2 mm 倾角=  1.3° 根高=1.084 m 裕度=  +93.3 mm
+[balance_sim_node]: 施加扰动 120.0 N (冲量 9.60 N·s)
+[balance_sim_node]: status=stable     偏移=   0.3 mm 倾角=  0.6° 根高=1.084 m 裕度=  +87.0 mm
+```
 
 ## 6. 参考
 

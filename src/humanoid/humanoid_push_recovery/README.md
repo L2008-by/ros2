@@ -27,7 +27,7 @@ freejoint 完全自由（不做速度锁定），机器人依靠双脚与地面�
 
 | 项目 | 版本 |
 |---|---|
-| 操作系统 | Ubuntu 22.04（VMware 虚拟机亦可，离屏渲染需 `export MUJOCO_GL=egl`） |
+| 操作系统 | Ubuntu 22.04.5 LTS（已在 VMware 虚拟机 + ROS2 Humble 实测） |
 | ROS2 | Humble（launch 启动）/ standalone 模式不需要 ROS |
 | Python | 3.10 |
 | 主要依赖 | mujoco ≥ 3.0、numpy、pyyaml |
@@ -142,8 +142,8 @@ humanoid_push_recovery/
 
 ## 实测指标
 
-在 Ubuntu 22.04 + MuJoCo 3.16（CPU）环境下由 `python3 main.py --sweep` 与
-`python3 main.py --test` 实测：
+在 **Ubuntu 22.04.5 虚拟机（ROS2 Humble，2 vCPU，Python 3.10.12，MuJoCo 3.15.0）**
+中由 `python3 main.py --sweep` 与 `python3 main.py --test` 实测：
 
 | 指标 | 结果 |
 |---|---|
@@ -153,7 +153,7 @@ humanoid_push_recovery/
 | 侧向 150 N×(0.08 s) 推扰 | 最大偏移 **34.3 mm**，恢复 **0.67 s** |
 | 临界冲量（前向） | 仅踝 **152.5 N / 12.20 N·s**；踝+髋 **172.7 N / 13.82 N·s**（+13.2%） |
 | 临界冲量（侧向） | 仅踝 **227.2 N / 18.17 N·s**；踝+髋 **285.3 N / 22.82 N·s**（+25.6%） |
-| 仿真吞吐 | 17,779 step/s（实时因子 35.6×） |
+| 仿真吞吐 | 9,433 step/s（实时因子 18.9×） |
 
 **结论**：踝策略是站立抗扰的主力；髋策略在不改变硬件的前提下把可恢复冲量提升
 13.2%（前向）/ 25.6%（侧向）。侧向抗扰能力强于前向，原因是双足站立时侧向支撑
