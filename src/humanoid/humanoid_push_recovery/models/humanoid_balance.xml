@@ -50,6 +50,10 @@
     <!-- 相机：跟踪躯干的第三视角，便于观察推扰与恢复 -->
     <camera name="overview" mode="targetbody" target="torso" pos="1.55 2.35 0.85" fovy="45"/>
     <camera name="side" mode="targetbody" target="torso" pos="0.15 2.6 0.5" fovy="45"/>
+    <!-- 固定侧视相机：演示动图 / 关键帧使用。相机不跟随机器人，因此「被推 → 偏移 →
+         恢复」整个过程在画面中可见（跟踪相机下位移会被抵消，只剩姿态变化）。
+         位于 −y 侧看向原点：x 轴（前进方向）在画面中向右 -->
+    <camera name="demo_side" mode="fixed" pos="0 -2.0 0.55" xyaxes="1 0 0 0 0 1" fovy="45"/>
 
     <!-- 地面刻度参照（每 0.5 m 一根细柱，便于观察位移） -->
     <body name="marker_x" pos="0.5 0 0.01">
@@ -57,6 +61,13 @@
     </body>
     <body name="marker_y" pos="0 0.5 0.01">
       <geom name="my" type="box" size="0.6 0.01 0.005" rgba="0.75 0.75 0.78 1" contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- 质心参考线：采集素材时由 main.py 移到「初始质心正下方」，用于在图中读出
+         质心水平位移。无质量、无碰撞，不影响仿真结果 -->
+    <body name="marker_ref" pos="0 0 0.012">
+      <geom name="mref" type="box" size="0.012 0.30 0.004" density="0"
+            rgba="0.96 0.96 0.99 1" contype="0" conaffinity="0"/>
     </body>
 
     <!-- ==================== 人形机器人 ==================== -->
@@ -76,11 +87,17 @@
           <joint name="hip_pitch_l" axis="0 1 0" range="-1.7 1.7"/>
           <body name="thigh_l" pos="0 0 -0.18">
             <geom name="thigh_geom_l" fromto="0 0 0 0 0 -0.34" size="0.055" rgba="0.95 0.55 0.1 1" mass="3.2"/>
+            <!-- 视觉补块：把大腿上端补到髋关节处（零质量、无碰撞，不影响物理） -->
+            <geom name="thigh_fill_l" fromto="0 0 0 0 0 0.18" size="0.055" density="0"
+                  rgba="0.95 0.55 0.1 1" contype="0" conaffinity="0"/>
             <body name="knee_l" pos="0 0 -0.34">
               <inertial pos="0 0 0" mass="0.05" diaginertia="0.001 0.001 0.001"/>
               <joint name="knee_l" axis="0 1 0" range="-2.5 0"/>
               <body name="shin_l" pos="0 0 -0.16">
                 <geom name="shin_geom_l" fromto="0 0 0 0 0 -0.30" size="0.045" rgba="0.95 0.55 0.1 1" mass="2.2"/>
+                <!-- 视觉补块：把小腿上端补到膝关节处 -->
+                <geom name="shin_fill_l" fromto="0 0 0 0 0 0.16" size="0.05" density="0"
+                      rgba="0.95 0.55 0.1 1" contype="0" conaffinity="0"/>
                 <body name="ankle_l" pos="0 0 -0.30">
                   <inertial pos="0 0 0" mass="0.05" diaginertia="0.001 0.001 0.001"/>
                   <joint name="ankle_pitch_l" axis="0 1 0" range="-0.9 0.9"/>
@@ -106,11 +123,15 @@
           <joint name="hip_pitch_r" axis="0 1 0" range="-1.7 1.7"/>
           <body name="thigh_r" pos="0 0 -0.18">
             <geom name="thigh_geom_r" fromto="0 0 0 0 0 -0.34" size="0.055" rgba="0.95 0.55 0.1 1" mass="3.2"/>
+            <geom name="thigh_fill_r" fromto="0 0 0 0 0 0.18" size="0.055" density="0"
+                  rgba="0.95 0.55 0.1 1" contype="0" conaffinity="0"/>
             <body name="knee_r" pos="0 0 -0.34">
               <inertial pos="0 0 0" mass="0.05" diaginertia="0.001 0.001 0.001"/>
               <joint name="knee_r" axis="0 1 0" range="-2.5 0"/>
               <body name="shin_r" pos="0 0 -0.16">
                 <geom name="shin_geom_r" fromto="0 0 0 0 0 -0.30" size="0.045" rgba="0.95 0.55 0.1 1" mass="2.2"/>
+                <geom name="shin_fill_r" fromto="0 0 0 0 0 0.16" size="0.05" density="0"
+                      rgba="0.95 0.55 0.1 1" contype="0" conaffinity="0"/>
                 <body name="ankle_r" pos="0 0 -0.30">
                   <inertial pos="0 0 0" mass="0.05" diaginertia="0.001 0.001 0.001"/>
                   <joint name="ankle_pitch_r" axis="0 1 0" range="-0.9 0.9"/>

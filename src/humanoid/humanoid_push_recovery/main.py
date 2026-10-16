@@ -122,6 +122,9 @@ def run_demo(params, force=None, direction=None, hip_enable=None, capture_dir=No
     sim = BalanceSim(model_path=model_path, params=p)
     sim.controller = BalanceController(p)
     sim.reset()
+    if capture_dir is not None:
+        # 采集素材时把地面参考线放到初始质心正下方（固定侧视相机下位移可见）
+        sim.set_com_reference_marker()
     view = open_viewer(sim) if viewer else None
     pacer = _Pacer(sim.dt) if view is not None else None
 
@@ -153,7 +156,8 @@ def run_demo(params, force=None, direction=None, hip_enable=None, capture_dir=No
         max_offset = max(max_offset, offset)
         speed = float(np.linalg.norm(sim.com_velocity()[:2]))
         if capture_dir is not None and i % 20 == 0 and len(frames) < 400:
-            frames.append(sim.render(camera="overview", height=360, width=480))
+            # 固定侧视相机：机器人不随相机移动，位移与倾角都能看出来
+            frames.append(sim.render(camera="demo_side", height=360, width=480))
         if i % 5 == 0:
             series.append({"t": float(sim.data.time), "offset": offset,
                            "tilt": sim.torso_tilt(), "zmp": sim.zmp().tolist(),
@@ -209,7 +213,9 @@ def run_demo(params, force=None, direction=None, hip_enable=None, capture_dir=No
                   f"末态倾角 {metrics['final_tilt_deg']:.2f}°")
 
     if capture_dir is not None:
-        metrics["capture"] = capture_assets(frames, series, capture_dir, metrics)
+        # 推扰发生在第 ns 步，采集帧率为每 20 步一帧 → 推扰时刻的帧序号 ns//20
+        metrics["capture"] = capture_assets(frames, series, capture_dir, metrics,
+                                            push_frame=ns // 20)
     sim.close()
     return metrics
 
@@ -232,52 +238,55 @@ class _Pacer:
             self._next = self._time.perf_counter()
 
 
-def capture_assets(frames, series, capture_dir, metrics):
-    """保存关键帧、动图、恢复过程曲线与 metrics.json。"""
+def capture_assets(frames, series, capture_dir, metrics, push_frame=None):
+    """保存关键帧、动图、时序原始数据 (CSV) 与 metrics.json。
+
+    说明：本模块**不生成数据曲线图**（matplotlib 绘图）。所有实测数值以
+    ``main.py --test`` / ``--sweep`` 的表格输出、``metrics.json`` 与这里的
+    ``recovery_series.csv`` 为准，需要曲线时请用这些原始数据自行绘制。
+
+    关键帧取自推扰时刻前后（``push_frame`` 为施加推扰时的帧序号）：
+    静立 → 被推瞬间 → 恢复中 → 恢复稳定。
+    """
     os.makedirs(capture_dir, exist_ok=True)
     saved = []
     if frames:
+        n = len(frames)
+        push_frame = 0 if push_frame is None else int(push_frame)
+        picks = (
+            (max(push_frame - 1, 0), "scene_stand"),
+            (min(push_frame + 2, n - 1), "scene_push"),
+            (min(push_frame + 10, n - 1), "scene_recover"),
+            (n - 1, "scene_settled"),
+        )
         try:
             import imageio.v2 as imageio
             gif = os.path.join(capture_dir, "push_recovery_demo.gif")
             imageio.mimsave(gif, frames, fps=25)
             saved.append(gif)
-            for idx, label in ((0, "scene_stand"), (len(frames) // 3, "scene_push"),
-                               (2 * len(frames) // 3, "scene_recover"),
-                               (len(frames) - 1, "scene_settled")):
+            for idx, label in picks:
                 png = os.path.join(capture_dir, f"{label}.png")
                 imageio.imwrite(png, frames[idx])
                 saved.append(png)
         except ImportError:
             print("[采集] 未安装 imageio，跳过关键帧/动图")
-    try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        t = [s["t"] for s in series]
-        off = [s["offset"] * 1000.0 for s in series]
-        tilt = [np.degrees(s["tilt"]) for s in series]
-        ankle = [s["ankle_tau"] if s["ankle_tau"] is not None else 0.0 for s in series]
-        fig, ax = plt.subplots(2, 1, figsize=(7, 5), sharex=True)
-        ax[0].plot(t, off, color="tab:blue", label="CoM offset (mm)")
-        ax[0].axhline(5.0, color="tab:green", ls="--", lw=1, label="recover threshold 5 mm")
-        if metrics.get("recover_time_s"):
-            ax[0].axvline(1.0 + metrics["recover_time_s"], color="tab:green", lw=1)
-        ax[0].set_ylabel("CoM offset (mm)")
-        ax[0].legend(loc="upper right")
-        ax[0].set_title(f"push {metrics['force_n']:.0f} N -> "
-                        f"{'FALL' if metrics['fell'] else 'RECOVERED'}")
-        ax[1].plot(t, tilt, color="tab:orange", label="torso tilt (deg)")
-        ax[1].plot(t, ankle, color="tab:purple", lw=1, label="ankle torque cmd (N*m)")
-        ax[1].set_xlabel("time (s)")
-        ax[1].legend(loc="upper right")
-        fig.tight_layout()
-        curve = os.path.join(capture_dir, "recovery_curve.png")
-        fig.savefig(curve, dpi=120)
-        plt.close(fig)
-        saved.append(curve)
-    except ImportError:
-        print("[采集] 未安装 matplotlib，跳过恢复曲线")
+    if series:
+        import csv
+        csv_path = os.path.join(capture_dir, "recovery_series.csv")
+        keys = ["t", "offset", "tilt", "ankle_tau", "hip_tau"]
+        with open(csv_path, "w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["time_s", "com_offset_m", "torso_tilt_deg",
+                             "ankle_torque_nm", "hip_torque_nm"])
+            for s in series:
+                writer.writerow([
+                    f"{s['t']:.4f}",
+                    f"{s['offset']:.6f}",
+                    f"{np.degrees(s['tilt']):.4f}",
+                    "" if s.get("ankle_tau") is None else f"{s['ankle_tau']:.4f}",
+                    "" if s.get("hip_tau") is None else f"{s['hip_tau']:.4f}",
+                ])
+        saved.append(csv_path)
     metrics_path = os.path.join(capture_dir, "metrics.json")
     with open(metrics_path, "w", encoding="utf-8") as handle:
         json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
@@ -324,31 +333,8 @@ def run_sweep(params, capture_dir=None, verbose=True):
     metrics = {"push_duration_s": dur, "critical": results, "curves": curves}
     if capture_dir is not None:
         os.makedirs(capture_dir, exist_ok=True)
-        try:
-            import matplotlib
-            matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
-            fig, ax = plt.subplots(figsize=(7, 4))
-            for label, style in (("ankle_only", "--o"), ("ankle_plus_hip", "-o")):
-                xs = [r["force"] for r in curves[label]]
-                ys = [min(r["max_offset_m"] * 1000.0, 200.0) for r in curves[label]]
-                fell = [r["fell"] for r in curves[label]]
-                ax.plot(xs, ys, style, label=label, markersize=4)
-                for x, y, f in zip(xs, ys, fell):
-                    if f:
-                        ax.plot([x], [y], "rx", markersize=9)
-            ax.axhline(0, color="gray", lw=0.5)
-            ax.set_xlabel("push force (N)")
-            ax.set_ylabel("max CoM offset (mm)")
-            ax.set_title("forward push: force -> max CoM offset (x = fall)")
-            ax.legend()
-            fig.tight_layout()
-            path = os.path.join(capture_dir, "critical_impulse.png")
-            fig.savefig(path, dpi=120)
-            plt.close(fig)
-            metrics["capture"] = [path]
-        except ImportError:
-            print("[采集] 未安装 matplotlib，跳过临界冲量曲线")
+        # 逐点原始数据写入 sweep_metrics.json（不生成数据曲线图：绘图由使用者
+        # 依据这些实测数据自行完成）
         with open(os.path.join(capture_dir, "sweep_metrics.json"), "w", encoding="utf-8") as handle:
             json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
     return metrics
