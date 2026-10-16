@@ -30,6 +30,52 @@ import mujoco
 _MODEL_REL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "humanoid_simple.xml")
 
 
+def open_viewer(sim, log=None):
+    """打开 MuJoCo 实时可视化窗口（可直接看到人形机器人界面）。
+
+    需要图形环境：本机 / 虚拟机桌面直接可用；SSH 远程需 `ssh -X` 转发 X11，
+    或设置 ``export DISPLAY=:0``。无图形环境时返回 ``None`` 并给出提示，
+    调用方可平滑退化为无窗口运行（不影响物理仿真与话题发布）。
+
+    参数:
+        sim: ``HumanoidSim`` 实例（窗口直接绑定其 model/data）
+        log: 可选 ``rclpy`` logger；提供时用 logger 输出提示，否则用 print
+    """
+    def say(msg, warn=False):
+        if log is not None:
+            (log.warning if warn else log.info)(msg)
+        else:
+            print(("[WARN] " if warn else "[INFO] ") + msg)
+
+    try:
+        import mujoco.viewer
+    except Exception as exc:                                      # noqa: BLE001
+        say(f"无法加载 MuJoCo 可视化模块：{exc}", warn=True)
+        return None
+    try:
+        view = mujoco.viewer.launch_passive(sim.model, sim.data)
+    except Exception as exc:                                      # noqa: BLE001
+        say(f"打开可视化窗口失败：{exc}", warn=True)
+        say("可视化窗口需要图形界面（DISPLAY），可尝试：", warn=True)
+        say("  · 本机 / 虚拟机桌面：直接运行即可看到人形机器人界面；", warn=True)
+        say("  · SSH 远程：用 `ssh -X` 开启 X11 转发，或 `export DISPLAY=:0`；", warn=True)
+        say("  · 无图形环境：standalone 用 `--no-viewer`；ROS2 用 `visualize:=false`。", warn=True)
+        return None
+    # 相机跟踪躯干，便于观察站立与行走位姿
+    try:
+        torso = mujoco.mj_name2id(sim.model, mujoco.mjtObj.mjOBJ_BODY, "torso")
+        if torso >= 0:
+            view.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+            view.cam.trackbodyid = torso
+            view.cam.distance = 3.2
+            view.cam.azimuth = 140.0
+            view.cam.elevation = -12.0
+    except Exception:                                             # noqa: BLE001
+        pass
+    say("已打开 MuJoCo 可视化窗口（关闭窗口或按 ESC 退出）")
+    return view
+
+
 class HumanoidSim:
     """人形机器人 MuJoCo 仿真封装。"""
 

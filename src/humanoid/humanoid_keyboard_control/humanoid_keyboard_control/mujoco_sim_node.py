@@ -23,9 +23,9 @@ from std_msgs.msg import Header
 from tf2_ros import TransformBroadcaster
 
 try:
-    from humanoid_keyboard_control.sim_core import HumanoidSim
+    from humanoid_keyboard_control.sim_core import HumanoidSim, open_viewer
 except ImportError:
-    from sim_core import HumanoidSim
+    from sim_core import HumanoidSim, open_viewer
 
 
 class MujocoSimNode(Node):
@@ -44,11 +44,13 @@ class MujocoSimNode(Node):
         self.declare_parameter('v_max', 0.3)
         self.declare_parameter('w_max', 0.6)
         self.declare_parameter('cmd_timeout', 0.5)       # 指令超时停车 (s)
+        self.declare_parameter('visualize', True)        # 是否打开 MuJoCo 可视化窗口
 
         model_path = self.get_parameter('model_path').get_parameter_value().string_value
         sim_rate = self.get_parameter('sim_rate').get_parameter_value().double_value
         publish_rate = self.get_parameter('publish_rate').get_parameter_value().double_value
         self.cmd_timeout = self.get_parameter('cmd_timeout').get_parameter_value().double_value
+        self.visualize = self.get_parameter('visualize').get_parameter_value().bool_value
 
         # ========== 仿真核心 ==========
         self.sim = HumanoidSim(model_path=model_path or None)
@@ -57,6 +59,14 @@ class MujocoSimNode(Node):
         self.sim.KP_ROLL = self.get_parameter('kp_roll').get_parameter_value().double_value
         self.sim.V_MAX = self.get_parameter('v_max').get_parameter_value().double_value
         self.sim.W_MAX = self.get_parameter('w_max').get_parameter_value().double_value
+
+        # ========== 可视化窗口（默认打开，可用 visualize:=false 关闭） ==========
+        # 打开后可在窗口中实时看到人形机器人站立与移动；无图形环境时自动跳过。
+        self.viewer = open_viewer(self.sim, self.get_logger()) if self.visualize else None
+        self.viewer_timer = None
+        if self.viewer is not None:
+            # 约 60 Hz 刷新窗口（与 500 Hz 物理步进解耦）
+            self.viewer_timer = self.create_timer(1.0 / 60.0, self._viewer_callback)
 
         # ========== 控制指令缓存 ==========
         self.cmd_vel = Twist()
@@ -158,6 +168,37 @@ class MujocoSimNode(Node):
                 f'vx={od["vx"]:+.2f} m/s 站立={self.sim.standing()}'
             )
 
+    # ------------------------------------------------------------------
+    # 可视化窗口
+    # ------------------------------------------------------------------
+    def _viewer_callback(self):
+        """刷新可视化窗口；窗口被手动关闭时自动停止刷新。"""
+        if self.viewer is None:
+            return
+        try:
+            self.viewer.sync()
+            if not self.viewer.is_running():
+                self.get_logger().info('可视化窗口已关闭，仿真继续在后台运行。')
+                self.close_viewer()
+        except Exception as exc:                                  # noqa: BLE001
+            self.get_logger().warning(f'可视化窗口异常，已停止刷新：{exc}')
+            self.close_viewer()
+
+    def close_viewer(self):
+        """关闭可视化窗口并取消刷新定时器（退出前调用）。"""
+        if self.viewer_timer is not None:
+            try:
+                self.viewer_timer.cancel()
+            except Exception:                                     # noqa: BLE001
+                pass
+            self.viewer_timer = None
+        if self.viewer is not None:
+            try:
+                self.viewer.close()
+            except Exception:                                     # noqa: BLE001
+                pass
+            self.viewer = None
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -167,6 +208,7 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        node.close_viewer()
         node.destroy_node()
         rclpy.shutdown()
 

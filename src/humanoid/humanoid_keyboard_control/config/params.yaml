@@ -2,6 +2,7 @@
 sim_rate: 500.0          # 物理仿真频率 (Hz)
 publish_rate: 30.0       # 话题发布频率 (Hz)
 cmd_timeout: 0.5         # 指令超时停车 (s)：超过该时间未收到 /cmd_vel 则自动停车
+visualize: true          # 是否打开 MuJoCo 可视化窗口（无图形界面时设为 false）
 
 # 站姿 PD 控制增益
 kp: 120.0                # 比例增益（关节力矩 = kp*位置误差 - kv*角速度）

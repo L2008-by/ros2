@@ -55,6 +55,11 @@ def generate_launch_description():
             default_value='0.5',
             description='指令超时停车时间 (s)'
         ),
+        DeclareLaunchArgument(
+            'visualize',
+            default_value='true',
+            description='是否打开 MuJoCo 可视化窗口（无图形界面时用 visualize:=false 关闭）'
+        ),
 
         # ========== 仿真节点 ==========
         Node(
@@ -67,6 +72,7 @@ def generate_launch_description():
                 'sim_rate': LaunchConfiguration('sim_rate'),
                 'publish_rate': LaunchConfiguration('publish_rate'),
                 'cmd_timeout': LaunchConfiguration('cmd_timeout'),
+                'visualize': LaunchConfiguration('visualize'),
             }]
         ),
 

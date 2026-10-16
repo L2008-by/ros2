@@ -31,8 +31,11 @@
 # 1) 安装 ROS2 Humble（Ubuntu 22.04）：
 #    参考官方文档 https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html
 
-# 2) 安装 Python 依赖（mujoco / numpy；录制 GIF 另需 imageio）
+# 2) 安装 Python 依赖（在**仓库根目录**执行；mujoco / numpy，录制 GIF 另需 imageio）
 pip3 install -r src/humanoid/humanoid_keyboard_control/requirements.txt
+
+# 3) 可视化窗口依赖（仅 Linux 桌面需要；若提示缺少 GLFW 再执行）
+sudo apt install -y libglfw3
 ```
 
 ROS 依赖（`rclpy`、`geometry_msgs`、`nav_msgs`、`sensor_msgs`、`tf2_ros`、
@@ -51,19 +54,35 @@ colcon build --symlink-install --packages-select humanoid_keyboard_control
 source install/setup.bash
 ```
 
+> 注意：执行完本节后当前目录是 `~/ros2_ws`，而本包被拷贝到
+> `~/ros2_ws/src/humanoid_keyboard_control`（**不含 `humanoid/` 这一层**），
+> 因此下一节不能用 `cd src/humanoid/...` 这种相对路径。
+
 ### 3.3 standalone（无需 ROS，最快验证）
 
+standalone 模式**不依赖 ROS，也不要求先执行 `colcon build`**，直接用克隆下来的源码
+即可运行。下面的路径以「仓库克隆在 `~/ros2`」为例，**请替换成你自己的实际路径**：
+
 ```shell
-cd src/humanoid/humanoid_keyboard_control
-python3 main.py            # 交互：W/S 前进后退，A/D 转向
+cd ~/ros2/src/humanoid/humanoid_keyboard_control   # ← 换成你自己的仓库路径
+python3 main.py            # 交互：W/S 前进后退，A/D 转向（弹出可视化窗口）
 python3 main.py --demo     # 自动演示动作序列，录制 GIF
 python3 main.py --test     # 自动化测试
+```
+
+若想运行 3.2 节拷贝到工作空间的那一份，路径是 `~/ros2_ws/src/humanoid_keyboard_control`
+（注意没有 `humanoid/` 这一层）：
+
+```shell
+cd ~/ros2_ws/src/humanoid_keyboard_control
+python3 main.py
 ```
 
 ### 3.4 ROS2 Humble launch
 
 ```shell
-cd ~/ros2_ws && colcon build --symlink-install --packages-select humanoid_keyboard_control
+cd ~/ros2_ws
+colcon build --symlink-install --packages-select humanoid_keyboard_control
 source install/setup.bash
 ros2 launch humanoid_keyboard_control main.launch.py
 ```
@@ -76,6 +95,30 @@ ros2 topic echo /humanoid/odom
 ros2 topic echo /joint_states
 ros2 run tf2_ros tf2_echo world humanoid/base_link   # 验证 TF 可读取
 ```
+
+### 3.5 可视化窗口（看到人形机器人界面）
+
+交互模式 `python3 main.py` 与 `ros2 launch` **默认都会弹出 MuJoCo 可视化窗口**，
+窗口内可实时看到自建双足人形机器人在场景中站立、前进与转向，视角自动跟踪躯干。
+
+| 运行环境 | 能否看到窗口 | 说明 |
+|---|---|---|
+| 本机 Ubuntu 桌面 / 虚拟机桌面终端 | ✅ | 直接运行即可看到人形机器人界面 |
+| SSH 远程登录 | 需 X11 转发 | 用 `ssh -X user@host` 登录，或先 `export DISPLAY=:0` 再运行 |
+| 无显示服务器（纯命令行 / CI） | ❌ | 用下面的开关关闭窗口，仅输出命令行信息 |
+
+```shell
+# standalone
+python3 main.py                     # 默认打开可视化窗口
+python3 main.py --no-viewer         # 无图形环境：仅命令行输出
+
+# ROS2 launch
+ros2 launch humanoid_keyboard_control main.launch.py                    # 默认打开窗口
+ros2 launch humanoid_keyboard_control main.launch.py visualize:=false   # 关闭窗口
+```
+
+若当前环境没有图形界面，程序会打印提示并自动退化为无窗口模式，
+**物理仿真、话题发布与自动化测试均不受影响**。
 
 ## 4. 实现要点
 

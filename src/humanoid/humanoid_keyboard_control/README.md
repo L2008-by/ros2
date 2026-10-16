@@ -31,10 +31,15 @@
 ### 1. standalone（无需 ROS，最快验证）
 
 ```bash
-python3 main.py            # 交互：W/S 前进后退，A/D 转向，空格急停，ESC 退出
+python3 main.py            # 交互：W/S 前进后退，A/D 转向，空格急停，ESC 退出（弹出可视化窗口）
+python3 main.py --no-viewer # 无图形环境：仅命令行输出
 python3 main.py --demo     # 自动演示动作序列，输出 demo_assets/humanoid_demo.gif
 python3 main.py --test     # 自动化测试（站姿/驱动/转向/渲染/性能）
 ```
+
+> 交互模式与演示模式默认打开 **MuJoCo 可视化窗口**，可直接看到人形机器人在场景中
+> 站立、前进与转向。窗口需要图形界面：SSH 远程请用 `ssh -X` 转发 X11；
+> 无图形环境加 `--no-viewer`（自动退化为无窗口运行，仿真与测试不受影响）。
 
 ### 2. ROS2 launch（Humble）
 
@@ -47,6 +52,9 @@ cp -r <本包路径> ~/ros2_ws/src/
 cd ~/ros2_ws && colcon build --symlink-install --packages-select humanoid_keyboard_control
 source install/setup.bash
 ros2 launch humanoid_keyboard_control main.launch.py
+
+# 无图形界面时关闭可视化窗口
+ros2 launch humanoid_keyboard_control main.launch.py visualize:=false
 ```
 
 启动后在本终端按键盘控制，另开终端可用：
