@@ -28,6 +28,11 @@
     fall_tilt: 0.55          # 躯干倾角超过此值判为跌倒 (rad)
 
     # --- 平衡控制器：踝策略（矢状面），力矩量纲 N·m ---
+    # 倾角 PD 项来自上游开源实现（见 THIRD_PARTY_NOTICES.md），输入为躯干轴倾角
+    # lean_x（前倾为正）及其低通速率
+    kp_ankle_lean: 300.0     # 倾角 → 踝力矩 (N·m/rad)
+    kd_ankle_lean: 0.0      # 倾角速率 → 踝力矩 (N·m·s/rad)
+    # 质心反馈项：纯倾角 PD 会留下稳态倾角偏差，加入后静立漂移 0.65 mm
     kp_ankle: 5400.0         # 质心偏移 → 踝力矩 (N·m/m)
     kd_ankle: 1440.0         # 质心速度 → 踝力矩 (N·m·s/m)
     ankle_torque_limit: 300.0  # 踝 pitch 力矩限幅 (N·m)
@@ -35,6 +40,8 @@
     # --- 平衡控制器：踝策略（侧向）---
     # roll 关节的力矩权限明显大于 pitch，沿用 pitch 增益会把机器人「抛离地面」，
     # 故单独整定并单独限幅
+    kp_ankle_roll_lean: 270.0
+    kd_ankle_roll_lean: 0.0
     kp_ankle_roll: 4800.0
     kd_ankle_roll: 600.0
     ankle_roll_torque_limit: 180.0
@@ -47,6 +54,7 @@
     kp_hip_roll: 1600.0
     kd_hip_roll: 240.0
     hip_roll_torque_limit: 180.0
+    hip_relax: 0.0           # 髋策略一阶松弛系数，0 = 关闭（本站默认）
 
     # --- 扰动默认值 ---
     push_duration: 0.08      # 扰动持续时间 (s)，0.08 s 量级接近冲量式推扰

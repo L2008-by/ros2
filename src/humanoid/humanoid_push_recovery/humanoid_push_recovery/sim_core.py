@@ -47,6 +47,10 @@ FALL_TILT = 0.55        # 躯干倾角超过此值判为跌倒 (rad, ≈31°)
 #: 质心加速度差分的一阶低通系数
 ACC_FILTER = 0.3
 
+#: 躯干倾角速率差分的一阶低通系数（倾角速率为旋转矩阵的原始差分，噪声大，
+#: 不平滑时微分项会把控制器推向高频震荡，见 balance/ankle_strategy.py 的说明）
+LEAN_RATE_FILTER = 0.7
+
 
 class BalanceSim:
     """人形机器人平衡仿真封装。"""
@@ -109,6 +113,9 @@ class BalanceSim:
         self._last_com = None
         self._com_vel = np.zeros(3)
         self._com_acc = np.zeros(3)
+        #: 躯干倾角差分状态（lean = 躯干轴相对竖直方向的倾斜分量）
+        self._last_lean = None
+        self._lean_rate = np.zeros(2)
         #: 扰动记录（供指标统计）
         self.push_history = []
         self.reset()
@@ -145,8 +152,11 @@ class BalanceSim:
         self._last_com = None
         self._com_vel = np.zeros(3)
         self._com_acc = np.zeros(3)
+        self._last_lean = None
+        self._lean_rate = np.zeros(2)
         self.push_history = []
         self._update_com()
+        self._update_lean()
         if self.controller is not None:
             self.controller.reset(self)
 
@@ -194,6 +204,7 @@ class BalanceSim:
 
         mujoco.mj_step(self.model, self.data)
         self._update_com()
+        self._update_lean()
 
     # ------------------------------------------------------------------
     # 质心运动学（每步更新一次，见 step / reset）
@@ -210,6 +221,23 @@ class BalanceSim:
         self._last_com = com.copy()
         self._com_vel = vel
         self._com_acc = ACC_FILTER * raw_acc + (1.0 - ACC_FILTER) * self._com_acc
+
+    def _update_lean(self):
+        """躯干倾角（lean_x 前倾 / lean_y 左倾）及其速率的有限差分。
+
+        ``lean`` 取躯干 z 轴（身体竖直轴）在世界系中的水平分量：
+        前倾（向 +x 倒）时 ``lean_x > 0``，左倾（向 +y 倒）时 ``lean_y > 0``。
+        该量即为踝策略 PD 律的输入（见 ``balance/ankle_strategy.py``）。
+        """
+        lean = self.torso_lean()
+        if self._last_lean is None:
+            self._last_lean = lean.copy()
+            self._lean_rate = np.zeros(2)
+            return
+        raw = (lean - self._last_lean) / self.dt
+        self._lean_rate = (LEAN_RATE_FILTER * self._lean_rate
+                           + (1.0 - LEAN_RATE_FILTER) * raw)
+        self._last_lean = lean.copy()
 
     # ------------------------------------------------------------------
     # 状态读取
@@ -234,6 +262,15 @@ class BalanceSim:
         """躯干相对竖直方向的倾角 (rad)。"""
         z_axis = self.data.xmat[self.torso_id].reshape(3, 3)[:, 2]
         return float(np.arccos(np.clip(z_axis[2], -1.0, 1.0)))
+
+    def torso_lean(self):
+        """躯干倾斜的水平分量 ``(lean_x, lean_y)``（无量纲，≈ 小角度下的倾角）。
+
+        取躯干 z 轴（身体竖直轴）在世界系中的 x / y 分量：前倾时 ``lean_x > 0``，
+        左倾时 ``lean_y > 0``，即「躯干向哪一侧倒」。踝策略 PD 律以此为输入。
+        """
+        z_axis = self.data.xmat[self.torso_id].reshape(3, 3)[:, 2]
+        return np.array([float(z_axis[0]), float(z_axis[1])], dtype=float)
 
     def zmp(self, accel=None, com=None):
         """零矩点（ZMP）水平位置 (m)。
@@ -271,6 +308,7 @@ class BalanceSim:
         """
         com = self.com_position()
         acc = self.com_acceleration()
+        lean = self.torso_lean()
         state = {
             "time": float(self.data.time),
             "com": com,
@@ -279,6 +317,10 @@ class BalanceSim:
             "zmp": self.zmp(acc, com),
             "root_height": self.root_height(),
             "tilt": self.torso_tilt(),
+            "lean_x": float(lean[0]),
+            "lean_y": float(lean[1]),
+            "lean_x_rate": float(self._lean_rate[0]),
+            "lean_y_rate": float(self._lean_rate[1]),
             "fallen": self.fallen(),
         }
         if with_margin:
@@ -306,6 +348,22 @@ class BalanceSim:
         img = renderer.render()
         del renderer
         return img
+
+    def set_com_reference_marker(self, x=None):
+        """把地面参考线 ``marker_ref`` 移到指定 x（默认当前质心投影 x）的正下方。
+
+        参考线是一段无质量、无碰撞的细条，只用于在渲染图像中读出质心的水平位移
+        （演示动图用固定侧视相机，位移在画面中可见）。不传入 ``x`` 时应复位之后
+        立即调用，把参考线放到初始质心正下方。
+        """
+        bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "marker_ref")
+        if bid < 0:
+            return False
+        if x is None:
+            x = float(self.com_position()[0])
+        self.model.body_pos[bid, 0] = float(x)
+        mujoco.mj_kinematics(self.model, self.data)
+        return True
 
     def close(self):
         """释放资源（本实现无外部句柄，保留统一接口）。"""
