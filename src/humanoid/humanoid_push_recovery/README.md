@@ -1,4 +1,4 @@
-# humanoid_push_recovery —— 平衡控制与外力抗扰恢复
+# humanoid_push_recovery —— 人形机器人平衡控制与外力抗扰恢复
 
 基于 MuJoCo 的人形机器人 **站立平衡与外力扰动恢复** 模块：自建双足模型底盘
 freejoint 完全自由（不做速度锁定），机器人依靠双脚与地面的真实接触以及关节力矩
@@ -17,9 +17,13 @@ freejoint 完全自由（不做速度锁定），机器人依靠双脚与地面�
   - 支撑多边形：由双脚底面 8 个角点求凸包；
   - ZMP：LIPM 近似 `ZMP = CoM_xy − (z/g)·CoM_acc_xy`；
   - 捕获点：`ξ = CoM_xy + v_com/√(g/h)`，并给出到支撑多边形边界的稳定裕度；
-- **恢复控制律**：
-  - **踝策略**：以质心偏移与质心速度为反馈，调整踝 pitch / roll 目标（主力）；
-  - **髋策略**：踝策略饱和后，用上半身角动量继续把质心拉回（可开关，用于对照实验）；
+- **恢复控制律**（代码基础为开源项目
+  [PrageethM1702/Bipedal-Walking-and-Push-Recovery](https://github.com/PrageethM1702/Bipedal-Walking-and-Push-Recovery)，
+  Apache-2.0，改写适配见 `THIRD_PARTY_NOTICES.md`）：
+  - **踝策略**：躯干倾角 P 项（上游原律）+ 质心偏移/速度反馈（消除稳态偏差），
+    输出踝 pitch / roll 关节**力矩** (N·m)，本站已按力矩量纲重新整定（主力）；
+  - **髋策略**：踝策略饱和后，用质心偏差与速度反馈输出髋关节力矩继续把质心拉回
+    （可开关，用于对照实验）；
 - **扰动注入**：对 torso 施加 6 维外力/力矩（`data.xfrc_applied`），支持任意方向与时长；
 - **性能评价**：单次扰动实验 + 二分法测定临界冲量 + 策略对照（仅踝 vs 踝+髋）。
 
@@ -27,11 +31,11 @@ freejoint 完全自由（不做速度锁定），机器人依靠双脚与地面�
 
 | 项目 | 版本 |
 |---|---|
-| 操作系统 | Ubuntu 22.04.5 LTS（已在 VMware 虚拟机 + ROS2 Humble 实测） |
+| 操作系统 | Ubuntu 22.04.5 LTS（已在 VMware 虚拟机 + ROS2 Humble 实测）；Windows 11 同样可运行 standalone |
 | ROS2 | Humble（launch 启动）/ standalone 模式不需要 ROS |
-| Python | 3.10 |
+| Python | 3.10（Ubuntu 实测）/ 3.13（Windows 实测） |
 | 主要依赖 | mujoco ≥ 3.0、numpy、pyyaml |
-| 文档素材（可选） | imageio、matplotlib |
+| 文档素材（可选） | imageio（关键帧/动图；原始时序数据导出为 CSV，无需 matplotlib） |
 
 ```bash
 pip install -r requirements.txt
@@ -52,7 +56,7 @@ python3 main.py --force 180                # 指定扰动力 (N)
 python3 main.py --direction 90             # 扰动方向（0=前向, 90=侧向, 180=后向）
 python3 main.py --no-hip                   # 关闭髋策略（仅踝策略，对照用）
 python3 main.py --sweep                    # 测定各方向临界冲量并与策略对照
-python3 main.py --capture assets_out       # 采集关键帧/动图/曲线/metrics.json
+python3 main.py --capture assets_out       # 采集关键帧/动图/时序CSV/metrics.json
 python3 main.py --test                     # 自动化测试（31 项）
 ```
 
@@ -127,8 +131,14 @@ ros2 run tf2_ros tf2_echo world humanoid/base_link   # 验证 TF 可读取
 ```
 humanoid_push_recovery/
 ├── humanoid_push_recovery/
-│   ├── sim_core.py            # MuJoCo 核心：站姿 PD / 扰动注入 / ZMP / 支撑多边形
-│   ├── balance.py             # 凸包与稳定裕度、ZMP/捕获点、踝+髋恢复控制律
+│   ├── sim_core.py            # MuJoCo 核心：站姿 PD / 扰动注入 / ZMP / 躯干倾角
+│   ├── balance/               # 稳定性判据与恢复策略子包（基础代码来自上游开源项目）
+│   │   ├── capture_point.py   #   捕获点 ξ = x + v/√(g/h)（改写）
+│   │   ├── support_polygon.py #   凸包 / 点在多边形内 / 稳定裕度（改写）
+│   │   ├── ankle_strategy.py  #   踝策略：倾角 P + 质心反馈 → 踝力矩（改写）
+│   │   ├── hip_strategy.py    #   髋策略：质心偏差/速度 → 髋力矩（改写）
+│   │   ├── controller.py      #   BalanceController：组合两策略输出 15 维力矩
+│   │   └── __init__.py        #   对外接口
 │   ├── evaluate.py            # 单次扰动实验、临界冲量二分测定、策略对照
 │   ├── mujoco_sim_node.py     # ROS2 平衡仿真节点
 │   └── push_teleop_node.py    # ROS2 扰动遥控节点（键盘）
@@ -136,27 +146,30 @@ humanoid_push_recovery/
 ├── models/humanoid_balance.xml # 自建双足模型（底盘自由 + 可施加外力）
 ├── launch/main.launch.py      # launch 启动入口
 ├── test/test_standalone.py    # 自动化测试（31 项）
+├── THIRD_PARTY_NOTICES.md     # 上游开源代码声明（Apache-2.0）
 ├── main.py / main.sh          # 模块主入口
 └── README.md
 ```
 
 ## 实测指标
 
-在 **Ubuntu 22.04.5 虚拟机（ROS2 Humble，2 vCPU，Python 3.10.12，MuJoCo 3.15.0）**
-中由 `python3 main.py --sweep` 与 `python3 main.py --test` 实测：
+由 `python3 main.py --sweep` 与 `python3 main.py --test` 实测
+（Windows 11 / MuJoCo 3.16.0 / Python 3.13；物理量为确定性仿真结果，与机器无关）：
 
 | 指标 | 结果 |
 |---|---|
-| 无扰动自由站立（8 s） | 不跌倒，质心漂移 **0.59 mm**，根高 1.084 m |
+| 无扰动自由站立（8 s） | 不跌倒，质心漂移 **0.55 mm**，根高 1.084 m |
 | 静立稳定裕度（捕获点到支撑边界） | **93.1 mm** |
-| 前向 120 N×(0.08 s) 推扰 | 最大偏移 **37.8 mm**，恢复 **0.91 s** |
-| 侧向 150 N×(0.08 s) 推扰 | 最大偏移 **34.3 mm**，恢复 **0.67 s** |
-| 临界冲量（前向） | 仅踝 **152.5 N / 12.20 N·s**；踝+髋 **172.7 N / 13.82 N·s**（+13.2%） |
-| 临界冲量（侧向） | 仅踝 **227.2 N / 18.17 N·s**；踝+髋 **285.3 N / 22.82 N·s**（+25.6%） |
-| 仿真吞吐 | 9,433 step/s（实时因子 18.9×） |
+| 前向 120 N×(0.08 s) 推扰 | 最大偏移 **36.3 mm**，恢复 **0.84 s**，残差 0.49 mm |
+| 侧向 150 N×(0.08 s) 推扰 | 最大偏移 **34.5 mm**，恢复 **0.74 s** |
+| 斜向 45° 120 N×(0.08 s) 推扰 | 最大偏移 29.9 mm（停在 8.2 mm 稳态偏移，见文档 5.2） |
+| 临界冲量（前向） | 仅踝 **147.3 N / 11.79 N·s**；踝+髋 **163.7 N / 13.10 N·s**（+11.1%） |
+| 临界冲量（侧向） | 仅踝 **226.6 N / 18.13 N·s**；踝+髋 **284.6 N / 22.77 N·s**（+25.6%） |
+| 自动化测试 | `main.py --test` **31 项全部通过** |
+| 仿真吞吐 | 9,047 ~ 14,691 step/s（实时因子 18.1× ~ 29.4×，随机器负载波动） |
 
 **结论**：踝策略是站立抗扰的主力；髋策略在不改变硬件的前提下把可恢复冲量提升
-13.2%（前向）/ 25.6%（侧向）。侧向抗扰能力强于前向，原因是双足站立时侧向支撑
+11.1%（前向）/ 25.6%（侧向）。侧向抗扰能力强于前向，原因是双足站立时侧向支撑
 宽度（460 mm）大于前后支撑长度（220 mm）。
 
 ## 能力边界（重要）
@@ -172,6 +185,8 @@ humanoid_push_recovery/
 
 ## AI 声明
 
-本模块的 MJCF 模型、平衡判据实现、踝/髋控制律、参数整定流程、ROS2 节点与
-评测脚本均在 AI 助手协助下完成，代码与文档由本人负责；表中所有实测数字均由本机
-运行 `main.py --sweep` / `--test` 得到，未做任何未运行的声明。
+本模块在 AI 助手协助下完成：稳定性判据与踝/髋策略的**代码基础来自 Apache-2.0
+开源项目**（见文件结构与 `THIRD_PARTY_NOTICES.md`，已改写适配 MuJoCo 力矩控制），
+MJCF 模型、ROS2 节点、参数整定与评测脚本为在其基础上开发；代码与文档由本人负责。
+表中所有实测数字均由本机运行 `main.py --sweep` / `--test` 得到
+（原始时序数据可用 `--capture` 导出为 CSV），未做任何未运行的声明。
