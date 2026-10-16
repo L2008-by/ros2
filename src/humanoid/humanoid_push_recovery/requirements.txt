@@ -1,0 +1,7 @@
+# humanoid_push_recovery 运行依赖
+mujoco>=3.0
+numpy
+pyyaml
+# 采集素材（关键帧/动图/曲线）另需
+# imageio
+# matplotlib

@@ -1,0 +1,42 @@
+# 人形机器人平衡与抗扰恢复参数配置
+# ==================================
+# standalone（main.py）与 ROS2 节点（mujoco_sim_node.py）共用本文件。
+
+# --- 仿真 ---
+sim_rate: 500.0          # 物理步进频率 (Hz)，与模型 timestep 一致
+publish_rate: 30.0       # ROS2 话题发布频率 (Hz)
+visualize: true          # 是否打开 MuJoCo 可视化窗口（无图形界面时设为 false）
+
+# --- 站姿 PD ---
+kp: 120.0                # 关节比例增益（力矩 = kp·位置误差 − kv·角速度）
+kv: 6.0                  # 关节微分增益
+kp_roll: 400.0           # 髋/踝 roll 关节单独加强（抗侧倾）
+torque_limit: 300.0      # 关节力矩限幅 (N·m)
+
+# --- 跌倒判据 ---
+fall_height: 0.85        # 根高低于此值判为跌倒 (m)
+fall_tilt: 0.55          # 躯干倾角超过此值判为跌倒 (rad)
+
+# --- 平衡控制器：踝策略（矢状面）---
+kp_ankle: 45.0           # 质心偏移 → 踝 pitch 目标
+kd_ankle: 12.0           # 质心速度 → 踝 pitch 目标
+ankle_limit: 3.0         # 踝 pitch 目标限幅 (rad)
+
+# --- 平衡控制器：踝策略（侧向）---
+# roll 关节的力矩权限明显大于 pitch，过大指令会把机器人「抛离地面」，故单独整定与限幅
+kp_ankle_roll: 12.0
+kd_ankle_roll: 1.5
+ankle_roll_limit: 0.45
+
+# --- 平衡控制器：髋策略 ---
+hip_enable: true         # 是否启用髋策略（关闭可用于「仅踝 vs 踝+髋」对照实验）
+kp_hip: 4.0
+kd_hip: 0.6
+kp_hip_roll: 4.0
+kd_hip_roll: 0.6
+hip_limit: 0.45
+
+# --- 推扰默认参数 ---
+push_duration: 0.08      # 扰动持续时间 (s)，0.08 s 量级接近冲量式推扰
+push_force: 120.0        # 默认扰动力 (N)
+push_direction_deg: 0.0  # 默认扰动方向（0° = +x 前向，90° = +y 左侧）
