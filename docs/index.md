@@ -67,6 +67,7 @@ ROS每章节运行代码:
 
 * [人形机器人基础](./humanoid/humanoid_basics.md)
 * [人形机器人键盘运动控制](./humanoid/humanoid_keyboard_control.md)
+* [人形机器人平衡控制与外力抗扰恢复](./humanoid/humanoid_push_recovery.md)
 * [MuJoCo单足弹跳机器人简单仿真](./humanoid/mujoco_hopper_demo/index.md)
 
 ## 3. 肌肉骨骼人 <span id='musculoskeletal'></span>
@@ -153,6 +154,8 @@ ROS每章节运行代码:
 * [水下多传感器感知与 3D 轨迹跟踪控制](./water/rov_trajectory_tracking.md)
 
 * [水下声呐 SLAM 占据栅格建图与自主避障导航](./water/rov_sonar_slam_navigation.md)
+  
+* [新增水下三维地形测绘模块](./water/underwater_sonar_mapping.md)
 
 ___
 
