@@ -24,6 +24,8 @@ import os
 
 import numpy as np
 import rclpy
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from geometry_msgs.msg import PointStamped, TransformStamped, Vector3
 from sensor_msgs.msg import JointState
@@ -109,9 +111,6 @@ class BalanceSimNode(Node):
 
         # ========== 可视化窗口 ==========
         self.viewer = open_viewer(self.sim, self.get_logger()) if self.visualize else None
-        self.viewer_timer = None
-        if self.viewer is not None:
-            self.viewer_timer = self.create_timer(1.0 / 60.0, self._viewer_callback)
 
         # ========== 发布者 ==========
         self.pub_com = self.create_publisher(PointStamped, '/balance/com', 10)
@@ -122,20 +121,26 @@ class BalanceSimNode(Node):
         self.pub_joint = self.create_publisher(JointState, '/joint_states', 10)
         self.tf_broadcaster = TransformBroadcaster(self)
 
-        # ========== 订阅者 ==========
+        # ========== 订阅者（独立回调组，确保推扰与复位指令不被定时器阻塞）==========
+        self.sub_group = ReentrantCallbackGroup()
         self.sub_push = self.create_subscription(
-            Vector3, '/balance/push', self._push_callback, 10)
+            Vector3, '/balance/push', self._push_callback, 10,
+            callback_group=self.sub_group)
         self.sub_reset = self.create_subscription(
-            Empty, '/balance/reset', self._reset_callback, 10)
+            Empty, '/balance/reset', self._reset_callback, 10,
+            callback_group=self.sub_group)
 
-        # ========== 定时器 ==========
-        self.steps_per_publish = max(1, int(sim_rate / publish_rate))
+        # ========== 单一主循环定时器（彻底解决 rclpy 多定时器饿死话题订阅问题）==========
+        # 将物理仿真积分 (sim_rate)、视窗渲染刷新与话题发布由单一主循环统筹推进，
+        # 避免多个高频独立定时器在事件循环中互相抢占造成死锁或订阅饥饿。
+        self.substeps = max(1, int(round(sim_rate / publish_rate)))
         self.step_count = 0
-        self.sim_timer = self.create_timer(1.0 / sim_rate, self._sim_step_callback)
-        self.pub_timer = self.create_timer(1.0 / publish_rate, self._publish_callback)
+        self.steps_per_publish = self.substeps
+        self.loop_timer = self.create_timer(1.0 / publish_rate, self._loop_callback)
 
         self.get_logger().info(
-            f'平衡仿真节点已启动 | 物理 {sim_rate:.0f} Hz | 发布 {publish_rate:.0f} Hz | '
+            f'平衡仿真节点已启动 | 物理 {sim_rate:.0f} Hz (主循环 {publish_rate:.0f} Hz × {self.substeps} 步) | '
+            f'发布 {publish_rate:.0f} Hz | '
             f'髋策略 {"开" if params.get("hip_enable") else "关"} | '
             f'模型 {model_path or "(包内默认)"}')
 
@@ -155,31 +160,28 @@ class BalanceSimNode(Node):
         self.recovering = False
         self.get_logger().info('仿真已复位，平衡参考已更新。')
 
-    def _sim_step_callback(self):
-        """物理步进。"""
-        self.sim.step()
-        self.step_count += 1
+    def _loop_callback(self):
+        """主仿真步进、视窗刷新与发布循环。"""
+        # 1. 批量推进物理步
+        for _ in range(self.substeps):
+            self.sim.step()
+            self.step_count += 1
 
-    def _viewer_callback(self):
-        """刷新可视化窗口。"""
-        if self.viewer is None:
-            return
-        try:
-            self.viewer.sync()
-            if not self.viewer.is_running():
-                self.get_logger().info('可视化窗口已关闭，仿真继续在后台运行。')
+        # 2. 刷新 3D 可视化窗口
+        if self.viewer is not None:
+            try:
+                self.viewer.sync()
+                if not self.viewer.is_running():
+                    self.get_logger().info('可视化窗口已关闭，仿真继续在后台运行。')
+                    self.close_viewer()
+            except Exception as exc:                              # noqa: BLE001
+                self.get_logger().warning(f'可视化窗口异常，已停止刷新：{exc}')
                 self.close_viewer()
-        except Exception as exc:                                  # noqa: BLE001
-            self.get_logger().warning(f'可视化窗口异常，已停止刷新：{exc}')
-            self.close_viewer()
+
+        # 3. 发布话题状态
+        self._publish_callback()
 
     def close_viewer(self):
-        if self.viewer_timer is not None:
-            try:
-                self.viewer_timer.cancel()
-            except Exception:                                     # noqa: BLE001
-                pass
-            self.viewer_timer = None
         if self.viewer is not None:
             try:
                 self.viewer.close()
@@ -269,8 +271,10 @@ class BalanceSimNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = BalanceSimNode()
+    executor = MultiThreadedExecutor(num_threads=2)
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
