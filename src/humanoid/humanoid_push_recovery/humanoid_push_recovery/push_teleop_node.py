@@ -29,20 +29,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import Vector3
 from std_msgs.msg import Empty
 
-# 按键 -> 方向角(度)。坐标约定：0° = +x 前向，+y 为机器人左侧（右手系），
-# 故 45° = 左前、135° = 左后、225° = 右后、315° = 右前。
-KEY_DIRECTIONS = {
-    'w': 0.0,      # 前
-    's': 180.0,    # 后
-    'a': 90.0,     # 左
-    'd': 270.0,    # 右
-    'q': 45.0,     # 左前
-    'e': 225.0,    # 右后
-    'KEY_UP': 0.0,
-    'KEY_DOWN': 180.0,
-    'KEY_LEFT': 90.0,
-    'KEY_RIGHT': 270.0,
-}
+from .keymap import direction_label, key_to_direction
 
 HELP_TEXT = """
 ============================================================
@@ -51,6 +38,8 @@ HELP_TEXT = """
   W / S      向前 / 向后推
   A / D      向左 / 向右推
   Q / E      左前 / 右后斜向推
+  ↑ / ↓      同 W / S（方向键）
+  ← / →      同 A / D（方向键）
   + / -      推扰力度 +20 / -20 N
   空格       复位
   ESC        退出
@@ -146,12 +135,15 @@ class PushTeleopNode(Node):
             self.force = max(self.fmin, self.force - self.step)
             self.get_logger().info(f'推扰力度 → {self.force:.0f} N')
             return
-        if key.lower() in KEY_DIRECTIONS:
-            deg = KEY_DIRECTIONS[key.lower()]
+        # 方向键键名为大写 KEY_*，字母键需兼容大小写；统一交给 keymap 归一化，
+        # 避免在此处再写一次 lower() 造成两者不一致（方向键会被静默忽略）。
+        deg = key_to_direction(key)
+        if deg is not None:
             rad = math.radians(deg)
             msg = Vector3(x=self.force * math.cos(rad), y=self.force * math.sin(rad), z=0.0)
             self.pub_push.publish(msg)
-            self.get_logger().info(f'施加扰动 {self.force:.0f} N @ {deg:.0f}°')
+            self.get_logger().info(
+                f'施加扰动 {self.force:.0f} N @ {deg:.0f}°（{direction_label(deg)}）')
 
     # ------------------------------------------------------------------
     def destroy_node(self):

@@ -21,15 +21,19 @@ test_standalone.py —— 平衡与抗扰恢复模块自动化测试（无 ROS �
 12. 恢复残差：恢复后质心残差 < 5 mm；
 13. 二分法前置校验：边界假设不成立时抛出异常而非返回错误结果；
 14. 跌倒判定：超大扰动下正确判为跌倒且根高/倾角越界；
-15. 仿真性能：实时因子满足演示要求。
+15. 仿真性能：实时因子满足演示要求；
+16. 按键映射：方向键 KEY_UP/DOWN/LEFT/RIGHT 与字母键的大小写一致性；
+17. 失败传播自检：检查失败必须以 AssertionError 结束，避免测试运行器误报通过。
 
 运行方式（包根目录）::
 
-    python3 test/test_standalone.py
+    python3 test/test_standalone.py       # 独立运行，失败时退出码为 1
+    python3 -m pytest test/ -v            # pytest / colcon 收集，失败即用例失败
 """
 
 from __future__ import annotations
 
+import functools
 import os
 import sys
 import time
@@ -53,8 +57,17 @@ PASS = 0
 FAIL = 0
 SKIP = 0
 
+# 当前用例内未通过的检查项；由 _testcase 在用例结束时汇总成 AssertionError。
+_failures = []
+
 
 def check(name, ok, detail=""):
+    """记录一项检查结果。
+
+    失败时除计数与打印外，还会登记到当前用例的失败列表，由 ``_testcase``
+    在用例结束时抛出 AssertionError。否则 pytest/colcon 只会看到函数正常返回，
+    即使检查失败也会报告为通过（它们不执行 ``main()`` 里的退出码判断）。
+    """
     global PASS, FAIL
     if ok:
         PASS += 1
@@ -62,12 +75,34 @@ def check(name, ok, detail=""):
     else:
         FAIL += 1
         print(f"[FAIL] {name} {detail}")
+        _failures.append(f"{name} {detail}".strip())
 
 
 def skip(name, reason):
     global SKIP
     SKIP += 1
     print(f"[SKIP] {name} （{reason}）")
+
+
+def _testcase(func):
+    """用例包装器：只要用例内有任一检查未通过，就以 AssertionError 结束。"""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        outer = list(_failures)
+        _failures.clear()
+        try:
+            func(*args, **kwargs)
+        finally:
+            failed = list(_failures)
+            _failures[:] = outer
+        if failed:
+            raise AssertionError(
+                f"{func.__name__}：{len(failed)} 项检查未通过\n  - "
+                + "\n  - ".join(failed)
+            )
+
+    return wrapper
 
 
 def make_sim(balance=True):
@@ -108,6 +143,7 @@ def _fixed_torque_trial(torque_map, steps=400):
 
 
 # ----------------------------------------------------------------------
+@_testcase
 def test_model():
     """1~2. 模型与执行器。"""
     sim = make_sim()
@@ -120,6 +156,7 @@ def test_model():
     sim.close()
 
 
+@_testcase
 def test_support_polygon():
     """3. 支撑多边形与质心投影裕度。"""
     sim = make_sim()
@@ -138,6 +175,7 @@ def test_support_polygon():
     sim.close()
 
 
+@_testcase
 def test_balance_criteria():
     """4. ZMP 与捕获点。"""
     sim = make_sim()
@@ -156,6 +194,7 @@ def test_balance_criteria():
     sim.close()
 
 
+@_testcase
 def test_stability_margin():
     """5. 稳定裕度：必须是「捕获点到支撑多边形边界的距离」。"""
     sim = make_sim()
@@ -182,6 +221,7 @@ def test_stability_margin():
     sim.close()
 
 
+@_testcase
 def test_free_standing():
     """6. 无扰动自由站立稳定性。"""
     sim = make_sim()
@@ -199,6 +239,7 @@ def test_free_standing():
     sim.close()
 
 
+@_testcase
 def test_control_sign():
     """7. 控制律符号自检（平衡控制器输出的是关节力矩，故按力矩标定）。"""
     d = _fixed_torque_trial({"ankle_pitch_l": 7.2, "ankle_pitch_r": 7.2})
@@ -218,6 +259,7 @@ def test_control_sign():
           f"(髋 roll +24 N·m → 质心 Δy = {d[1] * 1000:+.1f} mm)")
 
 
+@_testcase
 def test_no_balance_falls():
     """8. 对照实验：无平衡控制器必然跌倒。"""
     r = run_trial(PARAMS, force=120.0, direction_deg=0.0, balance=False)
@@ -226,6 +268,7 @@ def test_no_balance_falls():
           f"最大偏移 {r['max_offset_m'] * 1000:.0f} mm)")
 
 
+@_testcase
 def test_forward_recovery():
     """9. 前向抗扰恢复。"""
     r = run_trial(PARAMS, force=120.0, direction_deg=0.0)
@@ -239,6 +282,7 @@ def test_forward_recovery():
           f"(恢复时间 {r['recover_time_s'] if r['recover_time_s'] else float('nan'):.2f} s)")
 
 
+@_testcase
 def test_lateral_recovery():
     """10. 侧向抗扰恢复。"""
     r = run_trial(PARAMS, force=150.0, direction_deg=90.0)
@@ -249,6 +293,7 @@ def test_lateral_recovery():
           f"(最大偏移 {r['max_offset_m'] * 1000:.1f} mm)")
 
 
+@_testcase
 def test_strategy_comparison():
     """11~12. 策略对比与恢复残差。"""
     f_ankle = critical_force(PARAMS, direction_deg=0.0, hip_enable=False,
@@ -268,6 +313,7 @@ def test_strategy_comparison():
           f"(残差 {resid * 1000:.2f} mm)" if resid is not None else "(未恢复)")
 
 
+@_testcase
 def test_critical_force_bounds():
     """13. 二分法前置校验。"""
     raised = None
@@ -292,6 +338,7 @@ def test_critical_force_bounds():
           f"(临界力 {f:.1f} N)")
 
 
+@_testcase
 def test_fall_detection():
     """14. 跌倒判定。"""
     r = run_trial(PARAMS, force=500.0, direction_deg=0.0)
@@ -303,6 +350,7 @@ def test_fall_detection():
           f"(根高 {r['final_root_height']:.3f} m, 倾角 {np.degrees(r['final_tilt_rad']):.1f}°)")
 
 
+@_testcase
 def test_performance():
     """15. 仿真吞吐。"""
     sim = make_sim()
@@ -317,23 +365,100 @@ def test_performance():
     sim.close()
 
 
+@_testcase
+def test_keymap():
+    """16. 按键映射：方向键与字母键（含大小写），确保遥控不会静默忽略按键。"""
+    from humanoid_push_recovery.keymap import (
+        ARROW_KEYS, KEY_DIRECTIONS, direction_label, key_to_direction, normalize_key)
+
+    expect = {'KEY_UP': 0.0, 'KEY_DOWN': 180.0, 'KEY_LEFT': 90.0, 'KEY_RIGHT': 270.0}
+    got = {k: key_to_direction(k) for k in ARROW_KEYS}
+    check("方向键四个键均能查到正确方向角", got == expect, f"({got})")
+
+    check("方向键经 normalize_key 后保持大写",
+          all(normalize_key(k) == k for k in ARROW_KEYS),
+          f"({', '.join(ARROW_KEYS)})")
+
+    # 历史上的 bug：先 key.lower() 再查只含大写键名的表，方向键必然落空。
+    check("lower() 后的 KEY_* 不在映射表中（该写法会静默丢失方向键）",
+          'key_up' not in KEY_DIRECTIONS and key_to_direction('KEY_UP') is not None,
+          "(KEY_UP → 0.0°；'key_up' 不在表中)")
+
+    pairs = {c: (key_to_direction(c), key_to_direction(c.upper())) for c in 'wasdqe'}
+    check("字母键 W/A/S/D/Q/E 大小写等价",
+          all(low is not None and low == up for low, up in pairs.values()),
+          "(" + ", ".join(f"{c.upper()}→{low:.0f}°"
+                          for c, (low, _) in pairs.items() if low is not None) + ")")
+
+    unmapped = {k: key_to_direction(k) for k in ('z', 'x', '', 'KEY_HOME')}
+    check("未映射按键返回 None（不会误发扰动）",
+          all(v is None for v in unmapped.values()),
+          f"(已测 {len(unmapped)} 个非方向键)")
+
+    check("方向角中文说明与映射一致",
+          [direction_label(key_to_direction(k)) for k in ARROW_KEYS] == ['前', '后', '左', '右'],
+          "(↑前 ↓后 ←左 →右)")
+
+
+@_testcase
+def test_failure_propagation():
+    """17. 失败传播自检：check() 判失败必须以 AssertionError 结束。
+
+    pytest/colcon 只调用 ``test_*`` 函数，不执行 ``main()`` 的退出码判断；
+    若失败只计数打印而不抛异常，测试会误报通过。这里人为构造一项失败，
+    验证它确实被抛出。
+    """
+    global PASS, FAIL
+    saved = (PASS, FAIL)
+    print("[INFO] 下面这行 [FAIL] 是人为构造的，用于验证失败会真正传播")
+
+    @_testcase
+    def _deliberately_failing():
+        check("人为构造的失败项", False, "(应当触发 AssertionError)")
+
+    raised = None
+    try:
+        _deliberately_failing()
+    except AssertionError as exc:
+        raised = str(exc)
+    finally:
+        PASS, FAIL = saved          # 人为失败不计入统计
+
+    check("人为构造的失败项会抛出 AssertionError（pytest 据此返回非零）",
+          raised is not None,
+          f"({raised.splitlines()[0]})" if raised else "(失败被吞掉，测试会误报通过)")
+
+
+TESTS = (
+    test_model,
+    test_support_polygon,
+    test_balance_criteria,
+    test_stability_margin,
+    test_free_standing,
+    test_control_sign,
+    test_no_balance_falls,
+    test_forward_recovery,
+    test_lateral_recovery,
+    test_strategy_comparison,
+    test_critical_force_bounds,
+    test_fall_detection,
+    test_performance,
+    test_keymap,
+    test_failure_propagation,
+)
+
+
 def main():
     print("=" * 66)
     print("  人形机器人平衡与抗扰恢复模块自动化测试")
     print("=" * 66)
-    test_model()
-    test_support_polygon()
-    test_balance_criteria()
-    test_stability_margin()
-    test_free_standing()
-    test_control_sign()
-    test_no_balance_falls()
-    test_forward_recovery()
-    test_lateral_recovery()
-    test_strategy_comparison()
-    test_critical_force_bounds()
-    test_fall_detection()
-    test_performance()
+    for func in TESTS:
+        try:
+            func()
+        except AssertionError as exc:
+            # 独立运行时跑完其余用例（未通过项已由 check() 计数），
+            # 最终由退出码统一反映；pytest 下则直接判该用例失败。
+            print(f"[FAIL] 用例 {func.__name__} 存在 {len(str(exc).splitlines()) - 1} 项未通过检查")
     print("=" * 66)
     print(f"结果：{PASS} 项通过，{FAIL} 项失败，{SKIP} 项跳过")
     print("=" * 66)
