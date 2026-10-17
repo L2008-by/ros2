@@ -94,7 +94,7 @@ python3 main.py --direction 90   # 扰动方向（0=前向, 90=侧向, 180=后�
 python3 main.py --no-hip         # 关闭髋策略（仅踝策略，对照用）
 python3 main.py --sweep          # 测定各方向临界冲量并与策略对照
 python3 main.py --capture assets_out  # 采集关键帧/动图/时序CSV/metrics.json
-python3 main.py --test           # 自动化测试（31 项）
+python3 main.py --test           # 自动化测试（38 项）
 ```
 
 若运行的是 2.2 节拷贝到工作空间的那一份，路径为

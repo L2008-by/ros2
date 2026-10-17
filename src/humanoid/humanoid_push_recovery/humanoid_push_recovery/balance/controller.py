@@ -80,8 +80,6 @@ class BalanceController:
         # 髋策略
         self.hip_enable = bool(p.get("hip_enable", True))
         self.hip = HipStrategy(
-            kp_vel=float(p.get("kp_hip", 480.0)),
-            kd_vel=float(p.get("kd_hip", 72.0)),
             kp_pos=float(p.get("kp_hip", 480.0)),
             kd_pos=float(p.get("kd_hip", 72.0)),
             torque_limit_pitch=float(p.get("hip_torque_limit", 54.0)),

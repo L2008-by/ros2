@@ -184,7 +184,7 @@ def test_balance_criteria():
     xi = capture_point(com, sim.com_velocity(), com[2])
     check("静立时 ZMP 与质心投影接近（加速度≈0）",
           float(np.linalg.norm(zmp - com[:2])) < 0.02,
-          f"(|ZMP−CoM_xy| = {float(np.linalg.norm(zmp - com[:2])) * 1000:.2f} mm)")
+          f"(|ZMP-CoM_xy| = {float(np.linalg.norm(zmp - com[:2])) * 1000:.2f} mm)")
     check("捕获点计算有限且与质心量纲一致",
           np.all(np.isfinite(xi)) and abs(float(xi[0] - com[0])) < 0.2,
           f"(捕获点 {np.round(xi, 4)} m)")
@@ -243,7 +243,7 @@ def test_free_standing():
 def test_control_sign():
     """7. 控制律符号自检（平衡控制器输出的是关节力矩，故按力矩标定）。"""
     d = _fixed_torque_trial({"ankle_pitch_l": 7.2, "ankle_pitch_r": 7.2})
-    check("踝 pitch 正力矩 → 质心向后（−x）", d[0] < -0.01,
+    check("踝 pitch 正力矩 → 质心向后 (-x)", d[0] < -0.01,
           f"(踝 +7.2 N·m → 质心 Δx = {d[0] * 1000:+.1f} mm)")
 
     d = _fixed_torque_trial({"ankle_roll_l": 24.0, "ankle_roll_r": 24.0})
@@ -255,7 +255,7 @@ def test_control_sign():
           f"(髋 +7.2 N·m → 质心 Δx = {d[0] * 1000:+.1f} mm)")
 
     d = _fixed_torque_trial({"hip_roll_l": 24.0, "hip_roll_r": 24.0})
-    check("髋 roll 正力矩 → 质心向右（−y）", d[1] < -0.005,
+    check("髋 roll 正力矩 → 质心向右 (-y)", d[1] < -0.005,
           f"(髋 roll +24 N·m → 质心 Δy = {d[1] * 1000:+.1f} mm)")
 
 

@@ -19,9 +19,14 @@
 
 import os
 import sys
-import termios
-import tty
-import select
+try:
+    import termios
+    import tty
+    import select
+except ImportError:
+    termios = None
+    tty = None
+    select = None
 import math
 
 import rclpy
@@ -69,15 +74,18 @@ class PushTeleopNode(Node):
 
         # 终端设置（launch 下优先 /dev/tty）
         self._close_fd = False
-        try:
-            self._fd = os.open('/dev/tty', os.O_RDONLY)
-            self._close_fd = True
-        except OSError:
-            self._fd = sys.stdin.fileno()
-        try:
-            self.settings = termios.tcgetattr(self._fd)
-        except Exception:                                     # noqa: BLE001
-            self.settings = None
+        self.settings = None
+        self._fd = None
+        if termios is not None:
+            try:
+                self._fd = os.open('/dev/tty', os.O_RDONLY)
+                self._close_fd = True
+            except OSError:
+                self._fd = sys.stdin.fileno()
+            try:
+                self.settings = termios.tcgetattr(self._fd)
+            except Exception:                                     # noqa: BLE001
+                self.settings = None
 
         self.get_logger().info(f'扰动遥控节点已启动（当前力度 {self.force:.0f} N）')
         print(HELP_TEXT)
@@ -85,7 +93,7 @@ class PushTeleopNode(Node):
     # ------------------------------------------------------------------
     def _get_key(self, timeout=0.02):
         """非阻塞读取按键（支持 ANSI 方向键转义序列）。"""
-        if self.settings is None:
+        if self.settings is None or tty is None or select is None or termios is None:
             return ''
         try:
             tty.setraw(self._fd)
@@ -148,7 +156,7 @@ class PushTeleopNode(Node):
     # ------------------------------------------------------------------
     def destroy_node(self):
         """恢复终端设置。"""
-        if self.settings is not None:
+        if self.settings is not None and termios is not None and self._fd is not None:
             try:
                 termios.tcsetattr(self._fd, termios.TCSADRAIN, self.settings)
             except Exception:                                 # noqa: BLE001

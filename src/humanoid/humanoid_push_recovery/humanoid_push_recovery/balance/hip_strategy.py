@@ -26,20 +26,17 @@ class HipStrategy:
     """髋策略：输出髋 pitch / roll 关节力矩 (N·m)。
 
     参数:
-        kp_vel, kd_vel:      质心速度反馈增益（原项目律），N·m/(m/s)、N·m·s/(m/s)
-        kp_pos, kd_pos:      质心位置反馈增益（本站整定补充项），N·m/m、N·m·s/m
+        kp_pos, kd_pos:      质心位置 / 速度反馈增益，N·m/m、N·m·s/m
         torque_limit_pitch / torque_limit_roll: 力矩限幅 (N·m)
         relax:               一阶松弛系数，0 表示关闭（本站默认）
+        kp_vel, kd_vel:      向后兼容别名
     """
 
-    def __init__(self, kp_vel=480.0, kd_vel=72.0,
-                 kp_pos=480.0, kd_pos=72.0,
+    def __init__(self, kp_pos=480.0, kd_pos=72.0,
                  torque_limit_pitch=54.0, torque_limit_roll=180.0,
-                 relax=0.0):
-        self.kp_vel = float(kp_vel)
-        self.kd_vel = float(kd_vel)
-        self.kp_pos = float(kp_pos)
-        self.kd_pos = float(kd_pos)
+                 relax=0.0, kp_vel=None, kd_vel=None):
+        self.kp_pos = float(kp_pos if kp_vel is None else kp_vel)
+        self.kd_pos = float(kd_pos if kd_vel is None else kd_vel)
         self.torque_limit_pitch = float(torque_limit_pitch)
         self.torque_limit_roll = float(torque_limit_roll)
         self.relax = float(relax)

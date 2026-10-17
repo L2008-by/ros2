@@ -309,7 +309,7 @@ def run_sweep(params, capture_dir=None, verbose=True):
         print("  最大可恢复冲量测定（扰动持续 %.2f s）" % dur)
         print("=" * 66)
         print(f"{'方向':<12}{'仅踝策略':>22}{'踝+髋策略':>22}{'提升':>10}")
-        names = {"0": "前向 (+x)", "90": "侧向 (+y)", "180": "后向 (−x)"}
+        names = {"0": "前向 (+x)", "90": "侧向 (+y)", "180": "后向 (-x)"}
         for key in ("0", "90", "180"):
             a = results["ankle_only"][key]
             b = results["ankle_plus_hip"][key]

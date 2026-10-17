@@ -51,12 +51,15 @@ class BalanceSimNode(Node):
             ('visualize', True), ('kp', 120.0), ('kv', 6.0), ('kp_roll', 400.0),
             ('torque_limit', 300.0), ('fall_height', 0.85), ('fall_tilt', 0.55),
             # 平衡控制器参数为**力矩量纲**（N·m 及其增益），与 config/params.yaml 一致
+            ('kp_ankle_lean', 300.0), ('kd_ankle_lean', 0.0),
             ('kp_ankle', 5400.0), ('kd_ankle', 1440.0), ('ankle_torque_limit', 300.0),
+            ('kp_ankle_roll_lean', 270.0), ('kd_ankle_roll_lean', 0.0),
             ('kp_ankle_roll', 4800.0), ('kd_ankle_roll', 600.0),
             ('ankle_roll_torque_limit', 180.0),
             ('hip_enable', True), ('kp_hip', 480.0), ('kd_hip', 72.0),
             ('hip_torque_limit', 54.0), ('kp_hip_roll', 1600.0),
             ('kd_hip_roll', 240.0), ('hip_roll_torque_limit', 180.0),
+            ('hip_relax', 0.0),
             ('push_duration', 0.08),
             # 下列两项供 standalone / 遥控节点使用；仿真节点一并声明，
             # 以保证与 params.yaml 的 /balance_sim_node 段参数项一一对应
@@ -73,9 +76,13 @@ class BalanceSimNode(Node):
             'torque_limit': val('torque_limit').double_value,
             'fall_height': val('fall_height').double_value,
             'fall_tilt': val('fall_tilt').double_value,
+            'kp_ankle_lean': val('kp_ankle_lean').double_value,
+            'kd_ankle_lean': val('kd_ankle_lean').double_value,
             'kp_ankle': val('kp_ankle').double_value,
             'kd_ankle': val('kd_ankle').double_value,
             'ankle_torque_limit': val('ankle_torque_limit').double_value,
+            'kp_ankle_roll_lean': val('kp_ankle_roll_lean').double_value,
+            'kd_ankle_roll_lean': val('kd_ankle_roll_lean').double_value,
             'kp_ankle_roll': val('kp_ankle_roll').double_value,
             'kd_ankle_roll': val('kd_ankle_roll').double_value,
             'ankle_roll_torque_limit': val('ankle_roll_torque_limit').double_value,
@@ -85,6 +92,7 @@ class BalanceSimNode(Node):
             'kp_hip_roll': val('kp_hip_roll').double_value,
             'kd_hip_roll': val('kd_hip_roll').double_value,
             'hip_roll_torque_limit': val('hip_roll_torque_limit').double_value,
+            'hip_relax': val('hip_relax').double_value,
         }
         self.push_duration = val('push_duration').double_value
         self.visualize = val('visualize').bool_value

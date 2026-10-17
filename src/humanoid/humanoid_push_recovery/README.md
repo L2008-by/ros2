@@ -57,7 +57,7 @@ python3 main.py --direction 90             # 扰动方向（0=前向, 90=侧向,
 python3 main.py --no-hip                   # 关闭髋策略（仅踝策略，对照用）
 python3 main.py --sweep                    # 测定各方向临界冲量并与策略对照
 python3 main.py --capture assets_out       # 采集关键帧/动图/时序CSV/metrics.json
-python3 main.py --test                     # 自动化测试（31 项）
+python3 main.py --test                     # 自动化测试（38 项）
 ```
 
 无图形环境（SSH / 容器）下渲染需要 EGL：
@@ -147,7 +147,7 @@ humanoid_push_recovery/
 ├── config/params.yaml         # 仿真/PD/平衡/扰动参数
 ├── models/humanoid_balance.xml # 自建双足模型（底盘自由 + 可施加外力）
 ├── launch/main.launch.py      # launch 启动入口
-├── test/test_standalone.py    # 自动化测试（31 项）
+├── test/test_standalone.py    # 自动化测试（38 项）
 ├── THIRD_PARTY_NOTICES.md     # 上游开源代码声明（Apache-2.0）
 ├── main.py / main.sh          # 模块主入口
 └── README.md
@@ -167,7 +167,7 @@ humanoid_push_recovery/
 | 斜向 45° 120 N×(0.08 s) 推扰 | 最大偏移 29.9 mm（停在 8.2 mm 稳态偏移，见文档 5.2） |
 | 临界冲量（前向） | 仅踝 **147.3 N / 11.79 N·s**；踝+髋 **163.7 N / 13.10 N·s**（+11.1%） |
 | 临界冲量（侧向） | 仅踝 **226.6 N / 18.13 N·s**；踝+髋 **284.6 N / 22.77 N·s**（+25.6%） |
-| 自动化测试 | `main.py --test` **31 项全部通过** |
+| 自动化测试 | `main.py --test` **38 项全部通过** |
 | 仿真吞吐 | 9,047 ~ 14,691 step/s（实时因子 18.1× ~ 29.4×，随机器负载波动） |
 
 **结论**：踝策略是站立抗扰的主力；髋策略在不改变硬件的前提下把可恢复冲量提升
