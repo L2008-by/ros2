@@ -94,6 +94,7 @@ ROS每章节运行代码:
 * [车辆键盘遥操作与二维模拟](./ground/vehicle_pygame_teleop.md)
 * [2D 小车目标追踪仿真](./ground/car_2d_target_tracker.md)
 * [基于神经网络的无人小车自适应跟车（ACC）](./ground/carla_nn_car_following.md)
+* [恶劣雨雾天气下相机感知性能对比实验](./ground/weather_perception_benchmark.md)
 
 
 ## 5. 空域载具 <span id='air_vehicle'></span>
@@ -126,6 +127,8 @@ ROS每章节运行代码:
 * [无人机航点轨迹跟踪（PID 控制）](./air/waypoint_tracking.md)
 
 * [基于 GRU 的无人机飞行状态预测与 ROS2 在线误差分析](./air/state_prediction.md)
+
+* [MuJoCo 四旋翼仿真与 ROS2 桥接底座](./air/uav_mujoco_sim.md)
 
 * [低空载具的 ROS 示例教程](https://openhutb.github.io/air_doc/airsim_tutorial_pkgs/)
 
