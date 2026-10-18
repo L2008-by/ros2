@@ -11,7 +11,8 @@
   6. 仿真性能：实时因子（每秒物理步数）满足演示要求。
 
 运行方式（包根目录）：
-    python3 test/test_standalone.py
+    python3 test/test_standalone.py        # 独立运行，失败时退出码为 1
+    python3 -m pytest test/ -v             # pytest / colcon 收集
 """
 
 import math
@@ -23,6 +24,22 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from humanoid_keyboard_control.sim_core import HumanoidSim
+
+try:
+    import pytest
+
+    @pytest.fixture(name="sim")
+    def _sim_fixture():
+        """pytest 用的仿真实例。
+
+        各测试函数的第一参数 ``sim`` 在脚本模式下由 ``main()`` 显式传入；
+        用 pytest/colcon 收集时必须由 fixture 提供，否则会被当成未定义的
+        fixture 而在 setup 阶段直接报错（测试根本没机会执行）。
+        """
+        return HumanoidSim()
+
+except ImportError:                       # 未安装 pytest（直接跑脚本）时不需要 fixture
+    pass
 
 
 def test_standing(sim, seconds=4.0):

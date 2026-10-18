@@ -26,8 +26,44 @@ import os
 import numpy as np
 import mujoco
 
-# 模型文件位于包内 models/ 目录
-_MODEL_REL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "humanoid_simple.xml")
+# 模型文件位于包内 models/ 目录。定位方式见 _default_model_path()：
+# 源码运行 / 符号链接安装时在包的 ../models/；colcon 正式安装后模型被放到
+# share/<pkg>/models/，与 site-packages 下的 .py 不同级，需通过 ament 索引查找。
+_MODEL_NAME = "humanoid_simple.xml"
+
+
+def _default_model_path():
+    """返回包内 MJCF 模型的可用路径（多级回退）。
+
+    依次尝试：
+      1. ``realpath`` 后的 ../models/ —— colcon --symlink-install 时包目录是指向
+         源码的符号链接，realpath 能回到源码树，那里确实有 models/；
+      2. ``abspath`` 后的 ../models/ —— 直接以源码目录运行时有效；
+      3. ament 索引的 ``share/<pkg>/models/`` —— 正式安装（拷贝而非软链）时模型
+         被装到 share 下，与 Python 包目录不同级，只能靠索引定位。
+
+    三者都不存在时返回第 1 个候选，便于报错信息直接指向预期位置。
+    本函数不强制依赖 ROS：无 ament_index_python 时自动跳过第 3 种。
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    here_real = os.path.dirname(os.path.realpath(__file__))
+    candidates = [
+        os.path.join(here_real, "..", "models", _MODEL_NAME),
+        os.path.join(here, "..", "models", _MODEL_NAME),
+    ]
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        candidates.append(os.path.join(
+            get_package_share_directory("humanoid_keyboard_control"), "models", _MODEL_NAME))
+    except Exception:                                             # noqa: BLE001
+        pass
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+    return candidates[0]
+
+
+_MODEL_REL = _default_model_path()
 
 
 def open_viewer(sim, log=None):
