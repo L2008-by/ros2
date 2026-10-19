@@ -89,7 +89,7 @@ ankle =  0.30 * sin(φ)
 cd src/humanoid/humanoid_local_planner_bench
 python3 -m pip install -r requirements.txt
 python3 main.py --version      # 1.0.0
-python3 main.py --test         # 8 项检查
+python3 main.py --test         # 9 项检查
 python3 main.py --headless     # 对比表 + CSV + 三联图
 python3 main.py --gif          # 演示动图
 ```

@@ -148,6 +148,16 @@ def test_footprint_matters():
     assert s.clearance() > 0.0, "门洞中线不应直接碰撞"
 
 
+def test_empty_summary_has_all_keys(sim):
+    """一帧都没跑时 summary() 也要返回完整键，不能 KeyError。"""
+    from humanoid_local_planner_bench.metrics import RunRecorder
+    m = RunRecorder().summary(config.GOAL)
+    for key in ("reached", "time", "path_len", "min_clearance",
+                "collision_steps", "mean_w", "final_dist"):
+        assert key in m, "空记录缺少键 {}".format(key)
+    assert m["reached"] is False
+
+
 # ----------------------------------------------------------------------
 def main():
     print("=" * 62)
@@ -162,6 +172,7 @@ def main():
         ("步态不影响判定", lambda: test_gait_does_not_affect_clearance(CorridorSim())),
         ("规划器到达且零碰撞", test_planners_reach_goal_without_collision),
         ("足迹宽度生效", test_footprint_matters),
+        ("空记录不抛异常", lambda: test_empty_summary_has_all_keys(None)),
     ]
     failed = 0
     for title, fn in checks:

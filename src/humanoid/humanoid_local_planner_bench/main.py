@@ -26,6 +26,17 @@ from humanoid_local_planner_bench.planners import PLANNERS    # noqa: E402
 from humanoid_local_planner_bench.sim_core import CorridorSim  # noqa: E402
 
 
+def positive_float(text):
+    """argparse 类型校验：必须是正数，否则按参数错误退出（码 2）。"""
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError("需要数字，收到 {!r}".format(text))
+    if value <= 0:
+        raise argparse.ArgumentTypeError("必须为正数，收到 {}".format(value))
+    return value
+
+
 def build_parser():
     p = argparse.ArgumentParser(description="人形局部避障算法对比")
     p.add_argument("--planner", default="all", choices=["all", *PLANNERS.keys()],
@@ -38,10 +49,10 @@ def build_parser():
     p.add_argument("--view", default="persp",
                    choices=["overview", "persp", "door", "obstacle", "start"],
                    help="--shot 使用的机位")
-    p.add_argument("--hold", type=float, default=20.0, help="--shot 保持秒数")
+    p.add_argument("--hold", type=positive_float, default=20.0, help="--shot 保持秒数")
     p.add_argument("--test", action="store_true", help="运行自检")
-    p.add_argument("--control-hz", type=float, default=config.CONTROL_HZ)
-    p.add_argument("--time-limit", type=float, default=config.TIME_LIMIT)
+    p.add_argument("--control-hz", type=positive_float, default=config.CONTROL_HZ)
+    p.add_argument("--time-limit", type=positive_float, default=config.TIME_LIMIT)
     p.add_argument("--save-dir", default=config.DEFAULT_OUTPUT_DIR)
     p.add_argument("--version", action="version",
                    version="humanoid_local_planner_bench {}".format(config.VERSION))

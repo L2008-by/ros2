@@ -17,7 +17,11 @@ class RunRecorder:
     def summary(self, goal, goal_tol=0.35):
         s = self.samples
         if not s:
-            return {}
+            # 一帧都没跑（如 time_limit 过小）：返回完整键，避免调用方 KeyError
+            return {"reached": False, "time": 0.0, "path_len": 0.0,
+                    "straight_len": 0.0, "min_clearance": 0.0, "collision_steps": 0,
+                    "mean_w": 0.0, "max_w": 0.0,
+                    "final_dist": float("inf"), "end_xy": None, "samples": 0}
         x0, y0 = s[0]["x"], s[0]["y"]
         path = math.hypot(x0 - goal[0], y0 - goal[1])
         for a, b in zip(s, s[1:]):

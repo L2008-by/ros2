@@ -45,7 +45,7 @@ python3 -m pip install -r requirements.txt
 
 cd src/humanoid/humanoid_local_planner_bench
 python3 main.py --version              # 1.0.0
-python3 main.py --test                 # 自检 8 项，失败退出码 1
+python3 main.py --test                 # 自检 9 项，失败退出码 1
 python3 main.py --headless             # 对比表 + CSV + 曲线
 python3 main.py --gif                  # 演示动图（需 DISPLAY 或 xvfb-run）
 python3 main.py --demo --planner apf   # 视窗回放

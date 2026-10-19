@@ -14,6 +14,9 @@
   <depend>sensor_msgs</depend>
   <depend>tf2_ros</depend>
 
+  <!-- 运行依赖：MuJoCo 无标准 rosdep 键，需 pip 安装（见 requirements.txt / README） -->
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-matplotlib</exec_depend>
   <exec_depend>ros2launch</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
