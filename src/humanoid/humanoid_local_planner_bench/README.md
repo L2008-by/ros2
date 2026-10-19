@@ -33,7 +33,7 @@ Ubuntu 22.04 + MuJoCo 3.15.0，控制频率 20 Hz，到达判定半径 0.35 m。
 | 系统 | Ubuntu 22.04（VMware 虚拟机）/ Windows 10、11（standalone） |
 | Python | 3.10（22.04）/ 3.13（Windows） |
 | MuJoCo | 3.15.0（Ubuntu）/ 3.16.0（Windows） |
-| 依赖 | `mujoco`、`numpy`；出图另需 `matplotlib`、`pillow` |
+| 依赖 | `mujoco`、`numpy`（pip 安装）；出图另需 `matplotlib`、`pillow` |
 | ROS | Humble（仅 ROS 节点与 launch 需要） |
 | 图形 | 无需独显；`--gif` 需 OpenGL 上下文，无桌面会话时用 `xvfb-run` |
 

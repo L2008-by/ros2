@@ -14,7 +14,12 @@
   <depend>sensor_msgs</depend>
   <depend>tf2_ros</depend>
 
-  <!-- 运行依赖：MuJoCo 无标准 rosdep 键，需 pip 安装（见 requirements.txt / README） -->
+  <!-- 运行依赖：
+       - numpy / matplotlib 走系统包（rosdep 可解析）
+       - MuJoCo 在本模块中一律用 pip 安装（Ubuntu 22.04 未提供 apt 包）：
+           python3 -m pip install --user "mujoco>=3.0"
+         因此不写 <exec_depend>mujoco</exec_depend>，避免 rosdep 去找不存在的包。
+         完整清单见 requirements.txt，步骤见 README「安装与运行」。 -->
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-matplotlib</exec_depend>
   <exec_depend>ros2launch</exec_depend>
