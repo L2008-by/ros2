@@ -69,6 +69,13 @@ def run_one(name, args, sim=None, viewer=None, on_step=None, pace=False):
     dt = 1.0 / args.control_hz
     goal = config.GOAL
 
+    # 先记录初始状态（t=0），否则第一条样本是"走完第一步之后"的位置
+    rec.add(0.0, sim.pose(), 0.0, 0.0, sim.clearance(), sim.collided())
+    if on_step is not None:
+        on_step(rec.samples[-1])
+    if viewer is not None:
+        viewer.sync()
+
     t = 0.0
     phase = 0.0
     while t < args.time_limit:
@@ -84,6 +91,7 @@ def run_one(name, args, sim=None, viewer=None, on_step=None, pace=False):
 
         clr = sim.clearance()
         hit = sim.collided()
+        t += dt
         rec.add(t, sim.pose(), v, w, clr, hit)
         if on_step is not None:
             on_step(rec.samples[-1])
@@ -91,7 +99,6 @@ def run_one(name, args, sim=None, viewer=None, on_step=None, pace=False):
             viewer.sync()
         if math.hypot(x - goal[0], y - goal[1]) <= config.GOAL_TOL:
             break
-        t += dt
         if pace:                              # 演示时按控制周期节流，否则仿真几秒就跑完
             time.sleep(dt)
     return rec, rec.summary(goal, config.GOAL_TOL)

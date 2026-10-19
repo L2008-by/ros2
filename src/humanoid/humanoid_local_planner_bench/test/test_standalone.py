@@ -111,6 +111,7 @@ def _run(name, time_limit=60.0):
     planner.reset()
     rec = RunRecorder()
     dt = 1.0 / config.CONTROL_HZ
+    rec.add(0.0, s.pose(), 0.0, 0.0, s.clearance(), s.collided())
     t, phase = 0.0, 0.0
     while t < time_limit:
         pose = s.pose()
@@ -120,20 +121,29 @@ def _run(name, time_limit=60.0):
         yaw = pose[2] + w * dt
         phase += (v * dt) / 0.7 * 2 * math.pi
         s.set_pose(x, y, yaw, phase)
+        t += dt
         rec.add(t, s.pose(), v, w, s.clearance(), s.collided())
         if math.hypot(x - config.GOAL[0], y - config.GOAL[1]) <= config.GOAL_TOL:
             break
-        t += dt
-    return rec.summary(config.GOAL, config.GOAL_TOL)
+    return rec, rec.summary(config.GOAL, config.GOAL_TOL)
 
 
 def test_planners_reach_goal_without_collision():
     """三种规划器都必须到达终点且全程零碰撞。"""
     for name in PLANNERS:
-        m = _run(name)
+        _rec, m = _run(name)
         assert m["reached"], "{} 未到达终点（最终距离 {:.2f} m）".format(name, m["final_dist"])
         assert m["collision_steps"] == 0, "{} 发生 {} 步碰撞".format(name, m["collision_steps"])
         assert m["min_clearance"] > 0.10, "{} 最小间距过小：{:.3f}".format(name, m["min_clearance"])
+
+
+def test_first_sample_is_initial_state():
+    """第一条样本必须是 t=0 的初始状态，不能是"走完第一步之后"的位置。"""
+    rec, _m = _run("dwa", time_limit=3.0)
+    s0 = rec.samples[0]
+    assert s0["t"] == 0.0, "首条样本时间应为 0，实际 {}".format(s0["t"])
+    assert abs(s0["x"] - config.START[0]) < 1e-9, "首条样本 x 不是起点：{}".format(s0["x"])
+    assert abs(s0["y"] - config.START[1]) < 1e-9, "首条样本 y 不是起点：{}".format(s0["y"])
 
 
 def test_footprint_matters():
@@ -172,6 +182,7 @@ def main():
         ("步态不影响判定", lambda: test_gait_does_not_affect_clearance(CorridorSim())),
         ("规划器到达且零碰撞", test_planners_reach_goal_without_collision),
         ("足迹宽度生效", test_footprint_matters),
+        ("首条样本为初始状态", test_first_sample_is_initial_state),
         ("空记录不抛异常", lambda: test_empty_summary_has_all_keys(None)),
     ]
     failed = 0

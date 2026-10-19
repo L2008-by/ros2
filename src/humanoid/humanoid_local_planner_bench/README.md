@@ -19,8 +19,8 @@ Ubuntu 22.04 + MuJoCo 3.15.0，控制频率 20 Hz，到达判定半径 0.35 m。
 
 | 规划器 | 到达 | 时间 (s) | 路径 (m) | 最小间距 (m) | 碰撞步 | 平均 \|ω\| (rad/s) |
 |---|---|---|---|---|---|---|---|
-| DWA | 是 | 52.75 | 17.11 | 0.157 | 0 | 0.18 |
-| APF | 是 | **17.30** | 17.31 | 0.140 | 0 | 0.83 |
+| DWA | 是 | 52.80 | 17.19 | 0.157 | 0 | 0.18 |
+| APF | 是 | **17.35** | 17.39 | 0.140 | 0 | 0.83 |
 
 - 两者都能通过 0.90 m 窄门且零碰撞——足迹宽度确实进了判定。
 - APF 快约 3 倍，但转向抖动大（平均 |ω| 是 DWA 的 4.6 倍）。
@@ -45,7 +45,7 @@ python3 -m pip install -r requirements.txt
 
 cd src/humanoid/humanoid_local_planner_bench
 python3 main.py --version              # 1.0.0
-python3 main.py --test                 # 自检 9 项，失败退出码 1
+python3 main.py --test                 # 自检 10 项，失败退出码 1
 python3 main.py --headless             # 对比表 + CSV + 曲线
 python3 main.py --gif                  # 演示动图（需 DISPLAY 或 xvfb-run）
 python3 main.py --demo --planner apf   # 视窗回放

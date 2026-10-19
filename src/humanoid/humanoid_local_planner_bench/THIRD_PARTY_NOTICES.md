@@ -24,4 +24,4 @@
 - `figures.py` —— 多机位离屏渲染与拼图
 - `ros_node.py` —— ROS 2 节点（scan / odom / status / TF）
 - `models/corridor_scene.xml` —— 走廊、窄门、障碍、人形机器人与运动学步态
-- `test/test_standalone.py` —— 9 项自检
+- `test/test_standalone.py` —— 10 项自检
