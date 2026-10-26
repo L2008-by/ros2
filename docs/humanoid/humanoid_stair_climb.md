@@ -76,7 +76,7 @@ u ∈ [0.75,1.0)  落到 z1
 ```bash
 cd src/humanoid/humanoid_stair_climb
 python3 -m pip install -r requirements.txt
-python3 main.py --test         # 13 项检查
+python3 main.py --test         # 14 项检查
 python3 main.py                # 打开 MuJoCo 窗口实时演示
 python3 main.py --headless     # 只打印指标并写 CSV
 ```
@@ -99,6 +99,11 @@ ros2 launch humanoid_stair_climb main.launch.py
 ros2 topic echo /stair_climb/status --once
 ```
 
+节点发布的 `/stair_climb/joint_states`、`/stair_climb/odom`、`/stair_climb/status` 与
+`/tf`（`odom → base_link`）走的是和 `main.py --headless` 同一套步态与指标，
+所以 `status` 里那行摘要和终端输出逐字一致。到达平台后再按 `hold` 秒继续，
+之后停在平台位姿上继续发位姿，下游查 TF 不会超时。
+
 ## 五、实测结果
 
 Ubuntu 22.04 + Python 3.10.12 + MuJoCo 3.15.0，控制频率 50 Hz，步态周期 1.4 s。
@@ -118,6 +123,12 @@ Ubuntu 22.04 + Python 3.10.12 + MuJoCo 3.15.0，控制频率 50 Hz，步态周�
 
 同一个 `--headless` 在 Windows 宿主机与 Ubuntu 虚拟机内结果逐位一致。
 
+「关节越界 0」是把六个关节全部按 `models/stair_scene.xml` 里的 `joint range` 逐帧比对
+得到的：hip ±1.6、knee [−0.02, 2.1]、ankle ±1.1。本场景实际用到的行程是
+hip 最大 1.4622、knee 最大 1.9547、ankle 最大 0.9636，都留了余量。
+这组限位是给这个自建模型定的，不是实测机器人的机械限位；`test_standalone.py`
+里有一条测试解析 XML 比对 `config.JOINT_LIMITS`，改一处不改另一处会直接失败。
+
 ## 六、能力边界
 
 - **不含平衡控制**：基座是 freejoint 运动学驱动，重心高度由步态给定，不是动力学算出来的。
@@ -125,7 +136,8 @@ Ubuntu 22.04 + Python 3.10.12 + MuJoCo 3.15.0，控制频率 50 Hz，步态周�
 - **脚不参与接触**：脚 `contype=0`，与台阶的间距用 `mj_geomDistance` 量，不做接触力求解。
 - **无感知与规划**：台阶尺寸是给定的，不做视觉识别或落脚点搜索。
 - **单一场景**：6 级等高等深的直台阶，结论不外推到变高变深、带转角的楼梯。
-- **速度较慢**：0.214 m/s 前进速度，等价于「一步一级」的保守走法。
+- **速度较慢**：设计前进速度 0.214 m/s（= 步幅 0.30 / 周期 1.4），等价于「一步一级」的保守走法。
+  实测起点 x = −0.35、终点 2.19，11.84 s 走 2.54 m，平均 0.215 m/s，与设计值一致。
 
 ## 七、参数
 
@@ -136,4 +148,7 @@ Ubuntu 22.04 + Python 3.10.12 + MuJoCo 3.15.0，控制频率 50 Hz，步态周�
 | `CYCLE_TIME` / `SWING_RATIO` | `config.py` | 1.4 s / 0.42 | 步态周期与单腿摆动占比 |
 | `STRIDE` / `LIFT_HEIGHT` | `config.py` | 0.30 m / 0.05 m | 每步前进距离与抬腿余量 |
 | `CONTROL_HZ` | `config.py` | 50 Hz | 控制频率 |
+| `TIME_LIMIT` / `HOLD_TIME` | `config.py` | 16 s / 2 s | 仿真时长上限 / 到达后停留 |
+| `JOINT_LIMITS` | `config.py` | hip ±1.6、knee [−0.02,2.1]、ankle ±1.1 | 关节限位，与 XML 里 range 一致 |
 | `cycle_time` / `swing_ratio` / `lift_height` | `config/params.yaml` | 同上 | ROS 节点用的参数 |
+| `time_limit` / `hold` | `config/params.yaml` | 16 / 2 | ROS 节点的时长与停留，与 `config.py` 保持一致 |
