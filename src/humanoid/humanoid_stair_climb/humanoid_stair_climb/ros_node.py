@@ -5,17 +5,19 @@
     /stair_climb/joint_states   sensor_msgs/JointState   六个关节角
     /stair_climb/odom           nav_msgs/Odometry        基座位姿
     /stair_climb/status         std_msgs/String          进度与最终指标
+    /tf                         tf2_msgs/TFMessage       odom -> base_link
 """
 
 import math
 import os
 
 import rclpy
-from geometry_msgs.msg import Quaternion
+from geometry_msgs.msg import Quaternion, TransformStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import String
+import tf2_ros
 
 import humanoid_stair_climb.config as config
 from humanoid_stair_climb.gait import StairGait
@@ -50,6 +52,8 @@ class StairClimbNode(Node):
         self.pub_js = self.create_publisher(JointState, "stair_climb/joint_states", 10)
         self.pub_odom = self.create_publisher(Odometry, "stair_climb/odom", 10)
         self.pub_status = self.create_publisher(String, "stair_climb/status", 10)
+        # 与 /stair_climb/odom 对应，播 odom -> base_link，供 RViz 等下游使用
+        self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
 
         self.t = 0.0
         self.base_z = config.STAND_Z
@@ -84,6 +88,15 @@ class StairClimbNode(Node):
         odom.pose.pose.position.z = self.base_z
         odom.pose.pose.orientation = Quaternion(w=1.0)
         self.pub_odom.publish(odom)
+
+        tf_msg = TransformStamped()
+        tf_msg.header.stamp = js.header.stamp
+        tf_msg.header.frame_id = "odom"
+        tf_msg.child_frame_id = "base_link"
+        tf_msg.transform.translation.x = base_x
+        tf_msg.transform.translation.z = self.base_z
+        tf_msg.transform.rotation = Quaternion(w=1.0)
+        self.tf_broadcaster.sendTransform(tf_msg)
 
         if self.sim.reached() or self.t >= self.time_limit:
             self.done = True

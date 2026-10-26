@@ -18,6 +18,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 
 import humanoid_stair_climb.config as config
+from humanoid_stair_climb import __version__
 from humanoid_stair_climb.gait import StairGait
 from humanoid_stair_climb.metrics import RunRecorder, format_summary
 from humanoid_stair_climb.sim_core import StairSim
@@ -52,6 +53,8 @@ def build_parser():
     p.add_argument("--record-every", type=positive_float, default=0.10,
                    help="每隔多少秒仿真时间存一帧（默认 %(default)s）")
     p.add_argument("--test", action="store_true", help="跑内置自检后退出")
+    p.add_argument("--version", action="version",
+                   version="humanoid_stair_climb %s" % __version__)
     return p
 
 
