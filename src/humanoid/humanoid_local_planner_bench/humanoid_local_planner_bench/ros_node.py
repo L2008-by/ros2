@@ -5,7 +5,8 @@
     ~/scan        sensor_msgs/LaserScan   2D 激光（来自 MuJoCo 射线求交）
     ~/odom        nav_msgs/Odometry       机器人位姿
     ~/status      std_msgs/String         JSON：规划器、时间、间距、是否到达
-    TF            world -> planner_bench/base_link
+    TF            world -> planner_bench/base_link（动态）
+                  planner_bench/base_link -> planner_bench/laser（静态，z=SCAN_HEIGHT）
 """
 
 import json
@@ -17,7 +18,7 @@ from geometry_msgs.msg import TransformStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import String
-from tf2_ros import TransformBroadcaster
+from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
 from . import config
 from .planners import PLANNERS
@@ -64,11 +65,27 @@ class PlannerBenchNode(Node):
         self.pub_odom = self.create_publisher(Odometry, '~/odom', 10)
         self.pub_status = self.create_publisher(String, '~/status', 10)
         self.tf = TransformBroadcaster(self)
+        self.tf_static = StaticTransformBroadcaster(self)
+        self._publish_static_tf()
         self.create_timer(self.dt, self._tick)
 
         self.get_logger().info(
             '规划器对比节点已启动 | planner={} | {} 束激光 | {:.0f} Hz | 门洞净宽 0.90 m'
             .format(name, n_rays, hz))
+
+    def _publish_static_tf(self):
+        """补 planner_bench/base_link -> planner_bench/laser 的静态 TF。
+
+        激光从机器人中心上方 SCAN_HEIGHT 处发出，LaserScan 的 frame_id 用的是
+        planner_bench/laser；不补这条 RViz 会报 No transform，激光画不出来。
+        """
+        tf = TransformStamped()
+        tf.header.stamp = self.get_clock().now().to_msg()
+        tf.header.frame_id = 'planner_bench/base_link'
+        tf.child_frame_id = 'planner_bench/laser'
+        tf.transform.translation.z = config.SCAN_HEIGHT
+        tf.transform.rotation.w = 1.0
+        self.tf_static.sendTransform(tf)
 
     # ------------------------------------------------------------------
     def _tick(self):

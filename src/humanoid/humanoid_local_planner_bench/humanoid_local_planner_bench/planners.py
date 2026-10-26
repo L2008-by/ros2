@@ -38,13 +38,18 @@ class BasePlanner:
         raise NotImplementedError
 
 
+HORIZON_STEPS = 8          # 动态窗口覆盖多少个预测步（_predict 步长 0.1 s）
+
+
 class DWAPlanner(BasePlanner):
     """动态窗口法：在可达速度窗口内采样，按 朝向/障碍/速度 三项打分。"""
 
     name = "dwa"
 
-    def __init__(self, v_max=0.8, w_max=1.5, acc=0.6, alpha=2.0, beta=3.0, gamma=0.4):
-        self.v_max, self.w_max, self.acc = v_max, w_max, acc
+    def __init__(self, v_max=0.8, w_max=1.5, acc=0.6, w_acc=2.0,
+                 alpha=2.0, beta=3.0, gamma=0.4):
+        self.v_max, self.w_max = v_max, w_max
+        self.acc, self.w_acc = acc, w_acc
         self.alpha, self.beta, self.gamma = alpha, beta, gamma
         self.v, self.w = 0.0, 0.0
 
@@ -65,9 +70,16 @@ class DWAPlanner(BasePlanner):
 
     def step(self, pose, scan, goal, dt):
         pts = scan_to_points(pose, scan)
-        # 起步时 v=0、动态窗口几乎闭合会卡死，这里退化为「可达速度全集」采样
-        v_lo, v_hi = 0.05, self.v_max
-        w_lo, w_hi = -self.w_max, self.w_max
+        # 动态窗口：只采样本周期内由加速度可达的速度。
+        # HORIZON_STEPS 取 8，对应 _predict 里 0.8 s 的预测跨度；否则起步 v=0
+        # 时窗口几乎闭合会卡死。
+        dv = self.acc * dt * HORIZON_STEPS
+        dw = self.w_acc * dt * HORIZON_STEPS
+        v_lo = max(0.05, self.v - dv)
+        v_hi = min(self.v_max, self.v + dv)
+        w_lo = max(-self.w_max, self.w - dw)
+        w_hi = min(self.w_max, self.w + dw)
+        v_lo = min(v_lo, v_hi - 0.05)          # 保证窗口非空
 
         # 先剔除会撞上障碍的候选（硬约束），再在可行解里按 朝向+速度 择优。
         # 之前把障碍代价直接减进总代价，符号导致"越贴障越优"，会直接撞穿。

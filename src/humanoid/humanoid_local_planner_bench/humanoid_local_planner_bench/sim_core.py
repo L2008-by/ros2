@@ -107,7 +107,7 @@ class CorridorSim:
         """
         mujoco = self.mujoco
         x, y, yaw = self.pose()
-        origin = np.array([x, y, 0.80])
+        origin = np.array([x, y, config.SCAN_HEIGHT])
         out = []
         for i in range(self.n_rays):
             ang = yaw + 2.0 * math.pi * i / self.n_rays

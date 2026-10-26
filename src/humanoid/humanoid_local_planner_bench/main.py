@@ -44,6 +44,10 @@ def build_parser():
     p.add_argument("--headless", action="store_true", help="无窗口运行并导出结果")
     p.add_argument("--demo", action="store_true", help="打开视窗回放")
     p.add_argument("--gif", action="store_true", help="离屏渲染并导出演示动图")
+    p.add_argument("--gif-width", type=int, default=480,
+                   help="动图输出宽度（默认 %(default)s，按 4:3 计算高度）")
+    p.add_argument("--gif-colors", type=int, default=48,
+                   help="动图调色板颜色数（默认 %(default)s，越小体积越小）")
     p.add_argument("--figures", action="store_true", help="导出四宫格场景图与单图")
     p.add_argument("--shot", action="store_true", help="打开指定机位的视窗并保持（用于桌面截图）")
     p.add_argument("--view", default="persp",
@@ -225,11 +229,22 @@ def cmd_gif(args):
         return 1
     out = Path(args.save_dir) / "planner_demo.gif"
     out.parent.mkdir(parents=True, exist_ok=True)
-    frames[0].save(out, save_all=True, append_images=frames[1:],
-                   duration=90, loop=0, optimize=True)
+    # 统一调色板 + 抽帧，避免逐帧独立量化带来的体积膨胀和抖动
+    step = max(1, round(len(frames) / 30.0))
+    picked = frames[::step]
+    gw = max(160, min(args.gif_width, w))
+    gh = int(round(gw * h / w))
+    picked = [f.resize((gw, gh), Image.LANCZOS) for f in picked]
+    first = picked[0].quantize(colors=max(8, min(256, args.gif_colors)),
+                               method=Image.MEDIANCUT)
+    q = [first] + [f.quantize(palette=first, dither=Image.FLOYDSTEINBERG)
+                   for f in picked[1:]]
+    q[0].save(out, save_all=True, append_images=q[1:],
+              duration=90 * step, loop=0, optimize=True, disposal=2)
+    frames = picked
     size = out.stat().st_size / 1024
-    print("[动图] {}  帧数={}  尺寸={}x{}  {:.0f} KB".format(
-        out.resolve(), len(frames), w, h, size))
+    print("[动图] {}  帧数={}（每 {} 帧取 1）  尺寸={}x{}  {} 色  {:.0f} KB".format(
+        out.resolve(), len(q), step, gw, gh, args.gif_colors, size))
     del renderer
     return 0
 
@@ -258,11 +273,12 @@ def cmd_shot(args):
     viewer.cam.azimuth = az
     viewer.cam.elevation = el
     print("[截图模式] 机位={}，保持 {} 秒".format(args.view, args.hold))
+    # 不推进物理：腿没有驱动力，mj_step 会把摆好的步态压平（实测 500 步后
+    # root 下沉 20 mm、膝角从 0.999 掉到 0.03），截图时只保持当前位姿。
     end = time.time() + args.hold
     while viewer.is_running() and time.time() < end:
-        mujoco.mj_step(sim.model, sim.data)
         viewer.sync()
-        time.sleep(0.02)
+        time.sleep(0.05)
     viewer.close()
     return 0
 
