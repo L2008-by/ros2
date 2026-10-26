@@ -9,12 +9,13 @@ MuJoCo 场景：平地 + **6 级台阶**（每级高 0.12 m、深 0.30 m）+ 平
 |---|---|
 | ![](../img/humanoid/humanoid_stair_climb/scene_start.png) | ![](../img/humanoid/humanoid_stair_climb/scene_mid.png) |
 
-完整过程（30 帧，虚拟机内 `python3 main.py --record` 逐帧渲染后合成）：
+完整过程（Ubuntu 虚拟机内 `ffmpeg -f x11grab` 直接录屏，6 fps，596 KB）：
 
 ![](../img/humanoid/humanoid_stair_climb/demo.gif)
 
-静图为 Ubuntu 22.04 虚拟机桌面直接截屏；动图的帧序列在虚拟机内由 MuJoCo 离屏渲染得到，
-分辨率为渲染输出的 560×420。
+静图为 Ubuntu 22.04 虚拟机桌面的直接截屏，画面里能看到左侧 dock、顶部状态栏与 MuJoCo 窗口标题栏。
+动图是虚拟机内对 MuJoCo 窗口的直接录屏（`--pace --pace-scale 1.5` 放慢后 `ffmpeg -f x11grab` 录 18 s，
+再转 6 fps GIF）—— GNOME 跑在 Wayland 上，X11 抓屏只能拿到 XWayland 窗口，拿不到 GNOME 合成的桌面层。
 
 ## 一、为什么做这个模块
 
@@ -85,6 +86,9 @@ python3 main.py --headless     # 只打印指标并写 CSV
 ```bash
 python3 main.py --headless --record frames --record-every 0.4
 ```
+
+`--record` 走离屏渲染，导出纯场景画面、不含 UI。要录带 MuJoCo 窗口的动图，
+用 `--pace --pace-scale 1.5` 打开窗口后直接 `ffmpeg -f x11grab -window_id <id>` 录屏。
 
 ROS 2：
 

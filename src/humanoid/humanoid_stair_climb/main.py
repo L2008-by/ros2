@@ -151,10 +151,10 @@ def main(argv=None):
         import mujoco.viewer
         viewer = mujoco.viewer.launch_passive(sim.model, sim.data)
         # 侧视：看清台阶轮廓和抬腿动作（默认 free camera 落在正上方，只能看到台阶顶面）
-        viewer.cam.lookat[:] = [1.05, 0.0, 0.34]
-        viewer.cam.distance = 6.4
+        viewer.cam.lookat[:] = [1.00, 0.0, 0.36]
+        viewer.cam.distance = 8.6
         viewer.cam.azimuth = 90.0
-        viewer.cam.elevation = -24.0
+        viewer.cam.elevation = -22.0
         viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_JOINT] = 0
 
     try:
