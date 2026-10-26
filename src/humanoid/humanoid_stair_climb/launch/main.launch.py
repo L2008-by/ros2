@@ -2,7 +2,7 @@
 
 用法：
     ros2 launch humanoid_stair_climb main.launch.py
-    ros2 launch humanoid_stair_climb main.launch.py step_height:=0.12
+    ros2 launch humanoid_stair_climb main.launch.py cycle_time:=1.6
 """
 
 import os

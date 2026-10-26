@@ -15,8 +15,9 @@ import humanoid_stair_climb.config as config
 
 MODEL_NAME = config.MODEL_NAME
 
-# 台阶类几何（含平台），用于量脚底距离
-STEP_GEOMS = ("step_1", "step_2", "step_3", "landing")
+# 台阶类几何（含平台），用于量脚底距离。必须覆盖全部台阶，
+# 少一级就可能漏掉那一段的穿模。
+STEP_GEOMS = tuple("step_%d" % i for i in range(1, config.STEP_COUNT + 1)) + ("landing",)
 
 # qpos 布局：0-2 base 位置，3-6 base 四元数，7-12 六个关节
 QPOS_FREE = 7

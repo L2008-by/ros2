@@ -24,7 +24,7 @@ SWING_WINDOW = {"l": (0.0, config.SWING_RATIO),
 
 # ---------------------------------------------------------------- 地形
 def ground_height(x):
-    """给定 x 返回台阶顶面高度（平地 0，逐级 0.15，平台 0.45）。"""
+    """给定 x 返回台阶顶面高度（平地 0，逐级 0.12，平台 0.72）。"""
     if x < 0.0:
         return 0.0
     k = int(math.floor(x / config.STEP_DEPTH)) + 1
@@ -34,7 +34,7 @@ def ground_height(x):
 
 
 def step_index(x):
-    """x 所在的台阶级号：0 = 平地，1..3 = 台阶，4 = 平台。"""
+    """x 所在的台阶级号：0 = 平地，1..STEP_COUNT = 台阶，STEP_COUNT+1 = 平台。"""
     if x < 0.0:
         return 0
     k = int(math.floor(x / config.STEP_DEPTH)) + 1
