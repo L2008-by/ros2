@@ -88,7 +88,7 @@
 
       <!-- 左腿：髋 z=0.76 → 大腿 0.45 → 膝 → 小腿 0.45 → 踝 → 脚（脚底 -0.04） -->
       <body name="thigh_l" pos="0 0.105 0.76">
-        <joint name="hip_l" type="hinge" axis="0 1 0" range="-1.4 1.4"/>
+        <joint name="hip_l" type="hinge" axis="0 1 0" range="-1.6 1.6"/>
         <geom name="thigh_geom_l" class="vis" type="capsule" fromto="0 0 -0.045 0 0 -0.405" size="0.062"
               rgba="0.20 0.42 0.80 1"/>
         <body name="shank_l" pos="0 0 -0.45">
@@ -96,7 +96,7 @@
           <geom name="shank_geom_l" class="vis" type="capsule" fromto="0 0 -0.045 0 0 -0.405" size="0.052"
                 rgba="0.20 0.42 0.80 1"/>
           <body name="foot_l" pos="0 0 -0.45">
-            <joint name="ankle_l" type="hinge" axis="0 1 0" range="-0.8 0.8"/>
+            <joint name="ankle_l" type="hinge" axis="0 1 0" range="-1.1 1.1"/>
             <geom name="foot_l" class="vis" type="box" pos="0.06 0 -0.02" size="0.12 0.06 0.02"
                   rgba="0.15 0.15 0.18 1"/>
           </body>
@@ -105,7 +105,7 @@
 
       <!-- 右腿 -->
       <body name="thigh_r" pos="0 -0.105 0.76">
-        <joint name="hip_r" type="hinge" axis="0 1 0" range="-1.4 1.4"/>
+        <joint name="hip_r" type="hinge" axis="0 1 0" range="-1.6 1.6"/>
         <geom name="thigh_geom_r" class="vis" type="capsule" fromto="0 0 -0.045 0 0 -0.405" size="0.062"
               rgba="0.20 0.42 0.80 1"/>
         <body name="shank_r" pos="0 0 -0.45">
@@ -113,7 +113,7 @@
           <geom name="shank_geom_r" class="vis" type="capsule" fromto="0 0 -0.045 0 0 -0.405" size="0.052"
                 rgba="0.20 0.42 0.80 1"/>
           <body name="foot_r" pos="0 0 -0.45">
-            <joint name="ankle_r" type="hinge" axis="0 1 0" range="-0.8 0.8"/>
+            <joint name="ankle_r" type="hinge" axis="0 1 0" range="-1.1 1.1"/>
             <geom name="foot_r" class="vis" type="box" pos="0.06 0 -0.02" size="0.12 0.06 0.02"
                   rgba="0.15 0.15 0.18 1"/>
           </body>

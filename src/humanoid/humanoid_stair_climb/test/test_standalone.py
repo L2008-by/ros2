@@ -60,6 +60,27 @@ def test_step_index_monotonic():
     assert step_index(config.LANDING_X + 0.1) == config.STEP_COUNT + 1
 
 
+def test_joint_limits_match_xml():
+    """config.JOINT_LIMITS 必须与模型里各 joint 的 range 完全一致。"""
+    import xml.etree.ElementTree as ET
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "models", "stair_scene.xml")
+    root = ET.parse(path).getroot()
+    seen = {}
+    for joint in root.iter("joint"):
+        name = joint.get("name") or ""
+        key = name.split("_")[0]
+        assert key in config.JOINT_LIMITS, "模型里有 config 未登记的关节：%s" % name
+        lo, hi = [float(v) for v in joint.get("range").split()]
+        if key in seen:
+            assert seen[key] == (lo, hi), "%s 两条腿的限位不一致：%s vs %s" % (
+                key, seen[key], (lo, hi))
+        seen[key] = (lo, hi)
+    assert set(seen) == set(config.JOINT_LIMITS), (set(seen), set(config.JOINT_LIMITS))
+    for key, limits in config.JOINT_LIMITS.items():
+        assert seen[key] == limits, "%s: xml=%s config=%s" % (key, seen[key], limits)
+
+
 def test_smootherstep_endpoints():
     assert smootherstep(0.0) == 0.0
     assert abs(smootherstep(1.0) - 1.0) < 1e-12

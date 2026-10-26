@@ -71,10 +71,14 @@ class RunRecorder:
         penetration = max(0.0, -min_clr)
         landing_err = max([math.hypot(l["err_x"], l["err_z"]) for l in self.landings] or [0.0])
 
+        # 六个关节全查：hip / knee / ankle 各两条腿。
+        # 限位取自 config.JOINT_LIMITS，与 models/stair_scene.xml 的 joint range 一致。
         violations = 0
+        pairs = (("hip", "hips"), ("knee", "knees"), ("ankle", "ankles"))
         for p in s:
-            for k in p["knees"]:
-                if k < -0.01 or k > 2.11:
+            for name, key in pairs:
+                lo, hi = config.JOINT_LIMITS[name]
+                if any(v < lo or v > hi for v in p[key]):
                     violations += 1
                     break
 
