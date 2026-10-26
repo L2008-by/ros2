@@ -14,6 +14,36 @@ import humanoid_local_planner_bench.config as config
 
 MODEL_NAME = "corridor_scene.xml"
 
+# clearance() 依赖 mj_geomDistance 在「圆柱 vs box」上的结果。
+# 3.2.x 上同一组几何体会返回 0.6873（正确值 1.2600），负值会让最小间距失去意义，
+# 而 collided() 仍为 0，看上去像"没碰撞但间距为负"，排查成本很高。所以直接拦住。
+MIN_MUJOCO = (3, 3, 0)
+
+
+def _version_tuple(text):
+    out = []
+    for part in str(text).split(".")[:3]:
+        num = ""
+        for ch in part:
+            if not ch.isdigit():
+                break
+            num += ch
+        out.append(int(num) if num else 0)
+    while len(out) < 3:
+        out.append(0)
+    return tuple(out)
+
+
+def check_mujoco_version(mujoco):
+    """版本低于 3.3 时抛错，避免 clearance() 静默算错。"""
+    have = _version_tuple(getattr(mujoco, "__version__", "0"))
+    if have < MIN_MUJOCO:
+        raise RuntimeError(
+            "MuJoCo %s 过低，需要 >= %d.%d.%d。3.2.x 的 mj_geomDistance 在"
+            "「圆柱 vs box」上返回的间距偏小，clearance() 会出现负值。"
+            " 升级：python3 -m pip install -U 'mujoco>=3.3'"
+            % (getattr(mujoco, "__version__", "?"), MIN_MUJOCO[0], MIN_MUJOCO[1], MIN_MUJOCO[2]))
+
 # 障碍物几何名（用于碰撞与间距判定，不含地板）
 OBSTACLE_GEOMS = (
     "wall_south_a", "wall_south_b", "wall_north_a", "wall_north_b",
@@ -46,6 +76,7 @@ class CorridorSim:
 
     def __init__(self, model_path=None, n_rays=None, ray_range=None):
         import mujoco
+        check_mujoco_version(mujoco)
         self.mujoco = mujoco
         with open(model_path or default_model_path(), encoding="utf-8") as f:
             xml = f.read()

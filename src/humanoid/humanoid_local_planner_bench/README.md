@@ -32,7 +32,7 @@ Ubuntu 22.04 + MuJoCo 3.15.0，控制频率 20 Hz，到达判定半径 0.35 m。
 |---|---|
 | 系统 | Ubuntu 22.04（VMware 虚拟机）/ Windows 10、11（standalone） |
 | Python | 3.10（22.04）/ 3.13（Windows） |
-| MuJoCo | 3.15.0（Ubuntu）/ 3.16.0（Windows） |
+| MuJoCo | 3.3.0 / 3.15.0（Ubuntu）/ 3.16.0（Windows）；**下界 3.3**，3.2.x 不可用 |
 | 依赖 | `mujoco`、`numpy`（pip 安装）；出图另需 `matplotlib`、`pillow` |
 | ROS | Humble（仅 ROS 节点与 launch 需要） |
 | 图形 | 无需独显；`--gif` 需 OpenGL 上下文，无桌面会话时用 `xvfb-run` |
@@ -68,3 +68,4 @@ python3 main.py --demo --planner apf   # 视窗回放
 | `--gif` 报 OpenGL 上下文错误 | 无 `DISPLAY` | `export DISPLAY=:0` 或 `xvfb-run -a python3 main.py --gif` |
 | 激光最小距离接近 0 | 射线打到机器人自身 | 确认机器人几何体在 `group=1`、射线 `geomgroup=[1,0,1,1,1,1]` |
 | 规划器原地不动 | 激光被自身遮挡，全部报"贴脸" | 同上；`--test` 看"激光测墙距离"是否为 1.54 |
+| `MuJoCo 3.2.x 过低，需要 >= 3.3.0` | 3.2.x 的 `mj_geomDistance` 在「圆柱 vs box」上偏小 | `python3 -m pip install -U 'mujoco>=3.3'` |

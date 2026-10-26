@@ -18,8 +18,8 @@ MuJoCo 场景：8 m 走廊 + **0.90 m 窄门** + 两个圆柱障碍。足迹半�
 ![](../img/humanoid/humanoid_local_planner_bench/demo.gif)
 
 四张 `scene_*.png` 由 `python3 main.py --figures` 离屏渲染生成（文件名与 `figures.py` 的
-`SCENE_VIEWS` 一一对应）；动图由 `python3 main.py --gif` 生成（默认 480×320、48 色、26 帧，约 0.9 MB；
-`--gif-width` / `--gif-colors` 可调，不加参数时 640×426 全帧约 5 MB）。`--shot` 只按机位打开窗口
+`SCENE_VIEWS` 一一对应）；动图由 `python3 main.py --gif` 生成（默认 480×320、48 色、26 帧，953 KB；
+`--gif-width 640` 实测 1462 KB，`--gif-colors` 可再降）。`--shot` 只按机位打开窗口
 并保持姿势、不写文件，且保持期间不推进物理（腿没有驱动力，`mj_step` 会把步态压平）。
 
 ## 一、为什么做这个对比
@@ -92,12 +92,16 @@ ankle =  0.30 * sin(φ)
 
 ```bash
 cd src/humanoid/humanoid_local_planner_bench
-python3 -m pip install -r requirements.txt
+python3 -m pip install -r requirements.txt   # 含 mujoco>=3.3.0
 python3 main.py --version      # 1.0.0
 python3 main.py --test         # 10 项检查
 python3 main.py --headless     # 对比表 + CSV + 三联图
 python3 main.py --gif          # 演示动图
 ```
+
+MuJoCo 下界取 **3.3**。3.2.x 的 `mj_geomDistance` 在「圆柱 vs box」上返回的间距偏小：
+同一个起点位姿得到 0.6873 而不是 1.2600，`clearance()` 会出现负值，而 `collided()` 仍是 0。
+`CorridorSim` 初始化时就检查版本，低了直接抛错并给出升级命令。
 
 ROS 2：
 

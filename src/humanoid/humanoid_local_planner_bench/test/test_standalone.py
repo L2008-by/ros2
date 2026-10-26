@@ -17,7 +17,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import humanoid_local_planner_bench.config as config          # noqa: E402
-from humanoid_local_planner_bench.sim_core import CorridorSim  # noqa: E402
+from humanoid_local_planner_bench.sim_core import (         # noqa: E402
+    MIN_MUJOCO, CorridorSim, check_mujoco_version)
 from humanoid_local_planner_bench.planners import PLANNERS    # noqa: E402
 
 SIM = None
@@ -158,6 +159,23 @@ def test_footprint_matters():
     assert s.clearance() > 0.0, "门洞中线不应直接碰撞"
 
 
+class _FakeMujoco:
+    def __init__(self, version):
+        self.__version__ = version
+
+
+def test_mujoco_version_guard():
+    """低于 3.3 必须拒绝启动，3.3 及以上放行。"""
+    check_mujoco_version(_FakeMujoco("%d.%d.%d" % MIN_MUJOCO))
+    check_mujoco_version(_FakeMujoco("3.16.0"))
+    for bad in ("3.2.3", "3.2.7", "3.0.0", "2.9.9"):
+        try:
+            check_mujoco_version(_FakeMujoco(bad))
+        except RuntimeError:
+            continue
+        raise AssertionError("%s 应被拒绝" % bad)
+
+
 def test_empty_summary_has_all_keys(sim):
     """一帧都没跑时 summary() 也要返回完整键，不能 KeyError。"""
     from humanoid_local_planner_bench.metrics import RunRecorder
@@ -184,6 +202,7 @@ def main():
         ("足迹宽度生效", test_footprint_matters),
         ("首条样本为初始状态", test_first_sample_is_initial_state),
         ("空记录不抛异常", lambda: test_empty_summary_has_all_keys(None)),
+        ("MuJoCo 版本下界", test_mujoco_version_guard),
     ]
     failed = 0
     for title, fn in checks:
